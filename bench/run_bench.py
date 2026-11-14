@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 HERMES_HOME = Path(os.environ.get("BENCH_HERMES_HOME", Path(__file__).resolve().parent / "home"))
-NANO = Path(os.environ.get("NANO_RLM_DIR", "/mnt/zer0models/workspace/zer0/oss/_ext/nano-rlm"))
+NANO = Path(os.environ["NANO_RLM_DIR"]) if os.environ.get("NANO_RLM_DIR") else None
 HERE = Path(__file__).resolve().parent
 TOOLSETS = {"hermes-rlm": "rlm", "hermes-tools": "file,terminal,code_execution"}
 
@@ -55,15 +55,24 @@ def hermes_usage(session_id: str) -> dict:
 
 
 def rlm_usage(log: Path) -> dict:
-    out = {"subcalls": 0, "sub_prompt_tokens": 0, "sub_completion_tokens": 0, "cells": 0}
-    if log.exists():
-        for line in log.read_text().splitlines():
-            e = json.loads(line)
-            if e["event"] == "subcall":
+    out = {"subcalls": 0, "sub_prompt_tokens": 0, "sub_completion_tokens": 0, "cells": 0,
+           "subcall_statuses": {}, "subcall_latency_ms": 0, "malformed_log_lines": 0}
+    paths = sorted(log.glob("*.jsonl")) if log.is_dir() else ([log] if log.exists() else [])
+    for path in paths:
+        for line in path.read_text().splitlines():
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                out["malformed_log_lines"] += 1
+                continue
+            if e.get("event") == "subcall":
                 out["subcalls"] += 1
                 out["sub_prompt_tokens"] += e.get("prompt_tokens", 0)
                 out["sub_completion_tokens"] += e.get("completion_tokens", 0)
-            elif e["event"] == "cell":
+                status = e.get("status", "unknown")
+                out["subcall_statuses"][status] = out["subcall_statuses"].get(status, 0) + 1
+                out["subcall_latency_ms"] += e.get("ms", 0)
+            elif e.get("event") == "cell":
                 out["cells"] += 1
     return out
 
@@ -93,6 +102,8 @@ def kilo_credentials(provider: str):
 
 
 def run_nano(prompt, corpus_dir, args, run_dir):
+    if NANO is None:
+        raise ValueError("Set NANO_RLM_DIR to the nano-rlm checkout")
     base, key = kilo_credentials(args.provider)
     env = dict(os.environ, NANO_BASE_URL=base, NANO_API_KEY=key, NANO_MODEL=args.model,
                NANO_RLM_BIN=str(NANO / ".venv/bin/rlm"), RLM_HOME=str(run_dir / "nano-home"))
