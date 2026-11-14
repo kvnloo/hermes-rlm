@@ -1,7 +1,6 @@
-"""rlm plugin behaviour tests: real bwrap sandbox, fake sub-model.
+"""Plugin behavior tests with a fake sub-model.
 
-Run: /workspace/hermes-home/hermes-agent/venv/bin/python -m pytest \
-     /workspace/hermes-home/profiles/clean/plugins/rlm/tests -q
+Run python -m pytest rlm/tests. Add --rlm-sandbox for actual Linux isolation tests.
 
 reuse-checked: tool-context-trim tests pattern -- same importlib layout; these cover the rlm plugin only.
 """
@@ -9,6 +8,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
+from types import ModuleType
 from pathlib import Path
 
 import pytest
@@ -16,20 +17,20 @@ import pytest
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("rlm_plugin", PLUGIN_DIR / "__init__.py")
 rlm = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = rlm
 spec.loader.exec_module(rlm)
 
 
-def fake_subcall(prompt, max_tokens):
+async def fake_subcall(prompt, max_tokens):
     return f"LEN={len(prompt)}", {"prompt_tokens": len(prompt) // 4, "completion_tokens": 3}
 
 
 @pytest.fixture()
-def session(tmp_path, monkeypatch):
-    monkeypatch.setenv("RLM_MAX_SUBCALLS", "5")
-    monkeypatch.setenv("RLM_CELL_TIMEOUT_S", "3")
-    monkeypatch.setenv("RLM_MAX_OUTPUT_CHARS", "200")
-    monkeypatch.setenv("RLM_MAX_PROMPT_CHARS", "1000")
-    s = rlm.Session("t", subcall=fake_subcall, log_dir=tmp_path / "runs")
+def session(tmp_path, monkeypatch, request):
+    s = rlm.Session("t", subcall=fake_subcall, log_dir=tmp_path / "runs",
+                    settings={'max_subcalls': 5, 'timeout_s': 3,
+                              'max_output_chars': 200, 'max_prompt_chars': 1000},
+                    allow_unsandboxed=not request.config.getoption('--rlm-sandbox'))
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     (corpus / "a.txt").write_text("alpha " * 100)
@@ -50,13 +51,15 @@ def test_load_keeps_corpus_out_of_result_and_persists_state(session):
 
 
 def test_sandbox_has_no_network_no_host_files_no_env(session):
+    if session.allow_unsandboxed:
+        pytest.skip('requires --rlm-sandbox and Linux bubblewrap')
     session.load([str(session.corpus_dir)])
     out = session.exec(
         "import os, socket\n"
         "r = []\n"
         "try:\n    socket.create_connection(('1.1.1.1', 53), timeout=2); r.append('net')\n"
         "except OSError: pass\n"
-        "for p in [os.path.expanduser('~/.hermes/.env'), '/home/kvn', '/workspace', '/mnt/zer0models']:\n"
+        f"for p in {str([str(session.corpus_dir), str(session.log_path.parent)])}:\n"
         "    if os.path.exists(p): r.append(p)\n"
         "r.append(sorted(k for k in os.environ if 'KEY' in k or 'TOKEN' in k))\n"
         "print(r)")
@@ -75,9 +78,9 @@ def test_llm_batch_budget_and_prompt_cap(session):
     assert session.stats["subcalls"] == 2 and session.stats["prompt_tokens"] == 7
 
 
-def test_depth0_disables_subcalls(session, monkeypatch):
-    monkeypatch.setenv("RLM_MAX_SUBCALLS", "0")
-    s = rlm.Session("d0", subcall=fake_subcall, log_dir=session.log_path.parent)
+def test_depth0_disables_subcalls(session):
+    s = rlm.Session("d0", subcall=fake_subcall, log_dir=session.log_path.parent,
+                    settings={'max_subcalls': 0}, allow_unsandboxed=session.allow_unsandboxed)
     try:
         assert "budget exhausted" in s.exec("llm_query('hi')")["error"]
     finally:
@@ -97,15 +100,16 @@ def test_output_truncation_final_and_trajectory(session):
     session.load([str(session.corpus_dir)])
     out = session.exec("print('z'*1000)")
     assert len(out["stdout"]) < 400 and "truncated" in out["stdout"]
-    fin = session.exec("FINAL('42')")
+    fin = session.exec("FINAL('42', citations=[cite('b.txt', 7, 9)])")
     assert fin["final"] == "42"
     events = [json.loads(l)["event"] for l in session.log_path.read_text().splitlines()]
     assert events[0] == "load" and events.count("cell") == 2
 
 
-def test_handlers_return_json_errors(tmp_path):
+def test_handlers_return_json_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(rlm, '_data_dir', lambda: tmp_path)
     assert "FileNotFoundError" in rlm._load_handler({"paths": [str(tmp_path / "nope")]}, task_id="h")
-    rlm._sessions.pop("h", None)
+    rlm._shutdown()
 
 
 def test_relative_paths_anchor_at_task_workspace_not_process_cwd(session, tmp_path, monkeypatch):
@@ -114,6 +118,9 @@ def test_relative_paths_anchor_at_task_workspace_not_process_cwd(session, tmp_pa
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
-    monkeypatch.setattr("tools.file_tools_paths._resolve_base_dir", lambda task_id="default", **_: session.corpus_dir)
+    paths = ModuleType('tools.file_tools_paths')
+    paths._resolve_base_dir = lambda task_id='default', **_: session.corpus_dir
+    monkeypatch.setitem(sys.modules, 'tools', ModuleType('tools'))
+    monkeypatch.setitem(sys.modules, 'tools.file_tools_paths', paths)
     out = session.load(["b.txt"], task_id="t")
     assert out["files"] == 1 and "error" not in out
