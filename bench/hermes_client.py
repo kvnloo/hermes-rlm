@@ -20,6 +20,8 @@ def result_summary(result, agent):
     return {"answer": result.get("final_response") or "", "session_ids": [agent.session_id],
             "hermes_ingress": "library", "library_error": bool(result.get("error")),
             "library_partial": bool(result.get("partial")),
+            "completed": result.get("completed"), "failed": result.get("failed"),
+            "interrupted": result.get("interrupted"), "turn_exit_reason": result.get("turn_exit_reason"),
             "discovery_traces": [n for n in calls if n in {"tool_search", "tool_describe", "tool_call"}],
             "tool_calls": len(calls), "library_tools": sorted(agent.valid_tool_names),
             "host_root_input_tokens": agent.session_input_tokens,
@@ -65,7 +67,10 @@ def main(argv=None):
     with redirect_stdout(sys.stderr):
         summary = run(args)
     print(json.dumps(summary, ensure_ascii=False), flush=True)
-    return 1 if summary["library_error"] or summary["library_partial"] else 0
+    incomplete = (summary["completed"] is not True or summary["failed"] or summary["interrupted"]
+                  or any(s in str(summary["turn_exit_reason"] or "").lower()
+                         for s in ("max_iterations", "budget", "interrupt")))
+    return 1 if summary["library_error"] or summary["library_partial"] or incomplete else 0
 
 
 if __name__ == "__main__":

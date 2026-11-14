@@ -251,6 +251,20 @@ def source_sha(path):
     return subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
 
 
+def child_outcomes_ok(arm, row):
+    physical_children = [r for r in row.get("accounting", {}).get("requests", []) if r.get("role") == "sub"]
+    if arm == "nano-rlm":
+        logical = row.get("logical_call_outcomes")
+        if not isinstance(logical, list):
+            return False
+        children = [call for call in logical if call["role"] == "sub"]
+        return (not physical_children or bool(children)) and all(
+            not call["pending"] and call["status"] == 200 for call in children)
+    statuses = row.get("subcall_statuses", {})
+    return (not physical_children or bool(statuses)) and all(
+        status == "ok" for status, count in statuses.items() if count)
+
+
 def run_one(task, arm, rep, args, protocol, ledger):
     key = row_key(task, arm, rep, protocol)
     run_id = key[:16] + "-" + uuid.uuid4().hex[:8]
@@ -269,6 +283,7 @@ def run_one(task, arm, rep, args, protocol, ledger):
            "correct": None, "score": None}
     prompt = task_prompt(task, arm)
     (run_dir / "prompt.txt").write_text(prompt)
+    router = None
     try:
         with Router(ledger, run_id, args.root_model, args.sub_model,
                     upstream_timeout=min(args.timeout, 120),
@@ -336,9 +351,9 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     if args.hermes_ingress == "library":
                         if stdout.strip():
                             summary = json.loads(stdout.strip().splitlines()[-1])
-                            # Only adapter-owned output fields may enter the row.
                             for field in ("answer", "session_ids", "discovery_traces", "tool_calls",
                                           "library_tools", "library_error", "library_partial",
+                                          "completed", "failed", "interrupted", "turn_exit_reason",
                                           "host_root_input_tokens", "host_root_output_tokens", "host_api_calls"):
                                 if field in summary:
                                     row[field] = summary[field]
@@ -347,6 +362,7 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     else:
                         row["answer"] = stdout.split("session_id:")[0].strip()
             row["accounting"] = ledger.summary(run_id)
+            row["logical_call_outcomes"] = router.logical_snapshot()
             row["proxy_errors"] = router.errors
             row["tool_trace"] = router.observed
             row["root_input_tokens"] = row["accounting"]["root_prompt_tokens"]
@@ -370,6 +386,23 @@ def run_one(task, arm, rep, args, protocol, ledger):
                 if not row["rlm_eager_observed"] or not row.get("cells"):
                     row["valid"] = False
                     row["error"] = "RLM tools not exposed or no REPL cell executed"
+            if arm not in ("base-truncated", "nano-rlm"):
+                row["root_answer"] = row.get("answer", "")
+                final = row.get("validated_final")
+                if final is None:
+                    row["valid"] = False
+                    row.setdefault("error", "missing_validated_final")
+                else:
+                    row["answer"] = final["answer"]
+                if args.hermes_ingress == "library" and (
+                        row.get("completed") is not True or row.get("failed") or row.get("interrupted")
+                        or any(s in str(row.get("turn_exit_reason") or "").lower()
+                               for s in ("max_iterations", "budget", "interrupt"))):
+                    row["valid"] = False
+                    row.setdefault("error", "conversation_incomplete")
+            if arm != "base-truncated" and not child_outcomes_ok(arm, row):
+                row["valid"] = False
+                row.setdefault("error", "unrecovered_or_unknown_child_outcome")
             if row["valid"]:
                 grade = score_answer(task, row["answer"], args.scorer)
                 row.update(score=grade["score"], grading=grade,
@@ -379,7 +412,8 @@ def run_one(task, arm, rep, args, protocol, ledger):
     except Exception as exc:
         # Do not serialize exception strings from provider/client libraries.
         row.update(status="invalid", valid=False, score=None, correct=None,
-                   error=type(exc).__name__, accounting=ledger.summary(run_id))
+                   error=type(exc).__name__, accounting=ledger.summary(run_id),
+                   logical_call_outcomes=router.logical_snapshot() if router is not None else [])
     return row
 
 

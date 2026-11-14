@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -86,6 +87,7 @@ class Router:
         self.blocked = set()
         self.observed = []
         self.errors = []
+        self.logical_calls = {}
         router = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -116,7 +118,10 @@ class Router:
                     calls = [c.get("function", {}).get("name") for m in body.get("messages", [])
                              for c in m.get("tool_calls", [])]
                     router.observed.append({"role": role, "tools": tools, "tool_calls": calls})
-                    status, data, ct = router.forward(body, model, role)
+                    logical_id = self.headers.get("X-ACP-Model-Request-ID") if self.path.startswith("/nano/") else None
+                    if self.path.startswith("/nano/") and not logical_id:
+                        raise ValueError("nano request missing ACP model request identity")
+                    status, data, ct = router.forward(body, model, role, logical_id=logical_id)
                     self.reply(status, data, ct)
                 except Exception as exc:
                     router.errors.append(type(exc).__name__ + ":" + str(exc) if isinstance(exc, ValueError)
@@ -152,7 +157,29 @@ class Router:
         self.server.server_close()
         self.thread.join()
 
-    def forward(self, body, model, role):
+    def logical_snapshot(self):
+        with self.lock:
+            return [dict(value) for value in self.logical_calls.values()]
+
+    def forward(self, body, model, role, logical_id=None):
+        logical_id = logical_id or uuid.uuid4().hex
+        with self.lock:
+            previous = self.logical_calls.get(logical_id)
+            if previous and (previous["role"] != role or previous["model"] != model or previous["pending"]):
+                raise ValueError("conflicting logical request identity")
+            self.logical_calls[logical_id] = {"id": logical_id, "role": role, "model": model,
+                                              "status": None, "pending": True}
+        try:
+            result = self._forward(body, model, role)
+        except Exception:
+            with self.lock:
+                self.logical_calls[logical_id].update(status=599, pending=False)
+            raise
+        with self.lock:
+            self.logical_calls[logical_id].update(status=result[0], pending=False)
+        return result
+
+    def _forward(self, body, model, role):
         provider, base, key_env = MODELS[model]
         key = os.environ.get(key_env)
         if not key:

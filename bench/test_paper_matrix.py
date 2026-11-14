@@ -82,7 +82,8 @@ class MatrixTests(unittest.TestCase):
                 for session in ("parent", "child"):
                     req = urllib.request.Request(router.url + "/nano/v1/chat/completions",
                         json.dumps({"model": ROOT, "messages": []}).encode(),
-                        {"X-ACP-Agent-Session-ID": session, "Content-Type": "application/json"})
+                        {"X-ACP-Agent-Session-ID": session, "X-ACP-Model-Request-ID": session + "-request",
+                         "Content-Type": "application/json"})
                     with urllib.request.urlopen(req) as response:
                         self.assertEqual(response.status, 200)
         self.assertEqual([r["model"] for r in requests], [ROOT, SUB])
@@ -187,14 +188,18 @@ class MatrixTests(unittest.TestCase):
 
     def test_hermes_row_end_to_end_adapter(self):
         context = self.root / "source.txt"
-        context.write_text("input only")
+        context.write_text("73521 input only")
         task = dict(self.task, context_path=str(context), context_sha256=matrix.digest(context),
                     task_sha256="hash")
         template = self.root / "template"
         template.mkdir()
+        plugin = self.root / "plugin"
+        plugin.mkdir()
+        (plugin / "__init__.py").write_text("")
         args = matrix.parser().parse_args([
             str(self.root / "manifest"), str(self.root / "out"),
             "--ops-dir", str(self.root / "ops"), "--home-template", str(template),
+            "--plugin-source", str(plugin),
             "--released-source", str(self.root), "--released-python", sys.executable,
             "--fork-source", str(self.root), "--fork-python", sys.executable,
             "--nano-source", str(self.root)])
@@ -219,8 +224,10 @@ class MatrixTests(unittest.TestCase):
                 response.read()
             logs = Path(env["RLM_LOG_DIR"])
             logs.mkdir()
-            (logs / "hash.jsonl").write_text('{"event":"cell"}\n')
-            summary = {"answer": "ANSWER: 73521", "hermes_ingress": "library",
+            (logs / "hash.jsonl").write_text(json.dumps({"event": "cell", "final": "73521", "error": None,
+                "citations": [{"source": "context.txt", "start": 0, "end": 5, "quote": "73521"}]}) + "\n")
+            summary = {"answer": "ANSWER: 73521", "hermes_ingress": "library", "completed": True,
+                       "failed": False, "interrupted": False, "turn_exit_reason": "completed",
                        "session_ids": ["library-session"], "discovery_traces": [], "library_error": False}
             return {"stdout": json.dumps(summary), "stderr": "", "exit_code": 0,
                     "timed_out": False, "wall_s": 0.01}
@@ -231,7 +238,8 @@ class MatrixTests(unittest.TestCase):
             row = matrix.run_one(task, "rlm-no-subcalls", 0, args, {}, self.ledger)
         self.assertEqual(row.get("error"), None)
         self.assertTrue(row["valid"])
-        self.assertEqual(row["answer"], "ANSWER: 73521")
+        self.assertEqual(row["answer"], "73521")
+        self.assertEqual(row["root_answer"], "ANSWER: 73521")
         self.assertEqual(row["session_ids"], ["library-session"])
         self.assertEqual(row["hermes_ingress"], "library")
         self.assertEqual(row["score"], 1)
