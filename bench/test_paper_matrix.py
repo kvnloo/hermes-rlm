@@ -106,6 +106,15 @@ class MatrixTests(unittest.TestCase):
             router.forward({}, SUB, "sub")
         self.assertEqual([b['chat_template_kwargs']['enable_thinking'] for b in bodies], [False, False])
 
+    def test_hermes_prompt_requires_repl_final_not_prose(self):
+        for arm in ('rlm-no-subcalls', 'released-rlm', 'fork-rlm'):
+            prompt = matrix.task_prompt(self.task, arm)
+            self.assertIn("FINAL_VAR('answer'", prompt)
+            self.assertIn("cite('context.txt'", prompt)
+            self.assertNotIn('End with ANSWER:', prompt)
+        self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'base-truncated'))
+        self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'nano-rlm'))
+
     def test_no_raw_context_or_gold_in_rlm_prompt(self):
         for arm in matrix.ARMS[1:]:
             prompt = matrix.task_prompt(self.task, arm)

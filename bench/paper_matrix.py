@@ -126,7 +126,14 @@ def task_prompt(task, arm):
         intro += "This is the no-subcalls ablation: max_depth=0. Do not use llm_query, llm_batch or any LLM subcall. Solve with Python only. "
     elif arm != "nano-rlm":
         intro += "For semantic work use llm_query/llm_batch over relevant chunks and aggregate in Python. "
-    return intro + "\nQuestion: " + question + "\nUse source character spans where supported. End with ANSWER: <answer>."
+    if arm == "nano-rlm":
+        finish = "Use source character spans where supported. End with ANSWER: <answer>."
+    else:
+        finish = ("Compute the answer in a REPL variable named answer. Your last rlm_exec cell must call "
+                  "FINAL_VAR('answer', citations=[cite('context.txt', start, end)]). Use real supporting "
+                  "zero-based, end-exclusive character offsets. Ordinary final prose is not an answer "
+                  "and will be withheld.")
+    return intro + "\nQuestion: " + question + "\n" + finish
 
 
 def fresh_home(home, template, plugin, arm, router, args):
