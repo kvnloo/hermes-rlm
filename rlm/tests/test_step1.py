@@ -329,6 +329,8 @@ def test_opt_in_registration_and_cleanup(monkeypatch):
         register_tool=lambda name, toolset, *a, **kw: tools.append((name, toolset)),
         register_auxiliary_task=lambda name, **kw: tasks.append(name),
         register_command=lambda *a, **kw: None,
+        register_hook=lambda *a, **kw: None,
+        register_middleware=lambda *a, **kw: None,
         on_unload=unload.append,
     )
     monkeypatch.setattr(rlm, '_CTX', None)

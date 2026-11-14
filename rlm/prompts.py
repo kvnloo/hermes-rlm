@@ -69,6 +69,9 @@ variable name as a string, not the value. Nonempty loaded sources require at lea
 one valid citation. The host rejects unknown sources, invalid ranges and quotes
 that disagree with the original text. Never invent offsets. Explain incomplete
 coverage or exhausted budgets rather than claiming unsupported certainty.
+Submit your user-facing answer through FINAL or FINAL_VAR in the current turn.
+Ordinary final prose is not a substitute: the host withholds it without a current
+validated final, and otherwise publishes the verified answer and source spans.
 """
 
 SUBCALL_SYSTEM = (

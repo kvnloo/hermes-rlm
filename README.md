@@ -64,6 +64,10 @@ The guidance adapts the authors' [paper-era prompt](https://github.com/alexzhang
 
 Cancellation polls Hermes's thread-scoped interrupt predicate on the tool caller thread. It cancels and awaits active async completions, discards queued requests, and destroys the kernel. Only dispatched attempts consume subcall slots, including failed or cancelled attempts. Cancellation cannot retract work already accepted by a remote provider. Production has no blocking sync-LLM fallback.
 
+For a session that has loaded RLM context, the finished user-facing reply is fail-closed. A registered `transform_llm_output` hook returns only the current turn's host-validated `FINAL` answer and formatted `source[start:end]` quotes. Without one, it replaces root prose with an explicit withholding notice. Contradictory root prose never overrides a validated answer. Session start, new turns, reloads, later cells, failed finals, and timeouts clear authorization. Exact task, session, and turn identities come from native `pre_llm_call` and tool-execution middleware; missing or mismatched identities refuse RLM tool execution. Sessions that have not loaded RLM context are unchanged.
+
+This is a finished-response contract, not a streaming redaction guarantee. Hermes's supported `hold_stream` flag applies profile-wide, so this plugin deliberately leaves it off. Interim streamed text may already have been visible before the final response is replaced. No scoped stream-hold API is assumed.
+
 Each session has an independent process, namespace, budgets, and trajectory log under its profile's plugin data directory. Task and session identifiers both participate in identity. `/rlm` shows budgets and logs. Logs can contain code and answers; treat them as sensitive data.
 
 ## Tests

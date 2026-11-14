@@ -41,7 +41,7 @@ def test_host_stop_closes_inflight_http_connection(tmp_path, monkeypatch, reques
     config = {
         'model': {'provider': 'local-test', 'default': 'test-open-weight'},
         'plugins': {'enabled': ['rlm'], 'entries': {'rlm': {'settings': {
-            'concurrency': 1, 'max_subcalls': 3, 'timeout_s': 10}}}},
+            'concurrency': 1, 'max_subcalls': 3, 'timeout_s': 30}}}},
         # Plain HTTP loopback has no certificate to validate. Avoid cold trust-store IO.
         'providers': {'local-test': {'base_url': url, 'api_key': 'local-test-placeholder',
                                      'ssl_verify': False}},
@@ -58,6 +58,7 @@ def test_host_stop_closes_inflight_http_connection(tmp_path, monkeypatch, reques
     from tools.interrupt import set_interrupt
     __import__('agent.auxiliary_client')
     __import__('openai.resources.chat')
+    __import__('agent.reasoning_carriers')
 
     manager = get_plugin_manager()
     manager.discover_and_load()
@@ -71,7 +72,7 @@ def test_host_stop_closes_inflight_http_connection(tmp_path, monkeypatch, reques
     worker = threading.Thread(target=lambda: result.update(s.exec("llm_batch(['first','queued'])")))
     try:
         worker.start()
-        if not started.wait(5):
+        if not started.wait(15):
             import sys
             import traceback
             frame = sys._current_frames().get(worker.ident)

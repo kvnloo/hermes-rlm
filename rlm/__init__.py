@@ -28,6 +28,7 @@ import time
 import warnings
 from pathlib import Path
 
+from .final_gate import FinalGate
 from .prompts import RLM_GUIDANCE, SUBCALL_SYSTEM
 from .settings import limits as _limits, validate as validate_settings
 
@@ -150,6 +151,7 @@ class Session:
         self.proc: subprocess.Popen | None = None
         self.context = None
         self.sources = {}
+        self.last_validated_final = None
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "cost_usd": 0.0, "cost_unknown": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
@@ -170,6 +172,7 @@ class Session:
                           deadline if deadline is not None else time.monotonic() + self.lim["timeout_s"])
 
     def kill(self) -> None:
+        self.last_validated_final = None
         self._stop.set()
         proc, self.proc = self.proc, None
         if proc is not None:
@@ -314,6 +317,7 @@ class Session:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     def load(self, paths, task_id: str = "default") -> dict:
+        self.last_validated_final = None
         corpus, skipped = load_corpus(paths, self.lim["max_corpus_chars"], task_id)
         with self.lock:
             self.kill()
@@ -365,6 +369,7 @@ class Session:
     def exec(self, code: str) -> dict:
         lim = self.lim
         with self.lock:
+            self.last_validated_final = None
             self._stop.clear()
             t0 = time.monotonic()
             before = dict(self.stats)
@@ -378,6 +383,7 @@ class Session:
                 if reply.get("final") is not None:
                     try:
                         reply["citations"] = self._validate_final(reply["final"], reply.get("citations", []))
+                        self.last_validated_final = {"answer": reply["final"], "citations": reply["citations"]}
                     except ValueError as exc:
                         reply["final"], reply["error"] = None, str(exc)
             except TimeoutError:
@@ -397,7 +403,8 @@ class Session:
             " keep large values in variables and print summaries]")
         ms = int((time.monotonic() - t0) * 1000)
         self.log("cell", code=code, stdout_chars=len(out), error=reply.get("error"), ms=ms,
-                 final=reply.get("final"), subcalls=self.stats["subcalls"] - before["subcalls"])
+                 final=reply.get("final"), citations=reply.get("citations") if reply.get("final") is not None else None,
+                 subcalls=self.stats["subcalls"] - before["subcalls"])
         result = {"stdout": shown, "error": reply.get("error"), "ms": ms,
                   "subcalls_this_cell": self.stats["subcalls"] - before["subcalls"],
                   "budget": {"subcalls_used": self.stats["subcalls"], "subcalls_max": lim["max_subcalls"],
@@ -500,4 +507,24 @@ def register(ctx) -> None:
         ctx.register_auxiliary_task(task, display_name="RLM sub-call",
                                     description="Depth-1 sub-model behind llm_query/llm_batch")
     ctx.register_command("rlm", _rlm_command, description="Show RLM budgets, usage and trajectory logs")
+    def existing_session(task_id, session_id):
+        with _sessions_lock:
+            return _sessions.get((str(_data_dir()), task_id, session_id))
+
+    gate = FinalGate(existing_session)
+
+    def reset_session(session_id='', **_):
+        gate.reset(session_id=session_id)
+        profile = str(_data_dir())
+        with _sessions_lock:
+            keys = [key for key in _sessions if key[0] == profile and key[2] == session_id]
+            sessions = [_sessions.pop(key) for key in keys]
+        for session in sessions:
+            session.kill()
+
+    ctx.register_hook('pre_llm_call', gate.begin)
+    ctx.register_hook('transform_llm_output', gate.transform)
+    ctx.register_hook('on_session_start', reset_session)
+    ctx.register_hook('on_session_reset', reset_session)
+    ctx.register_middleware('tool_execution', gate.execute)
     ctx.on_unload(_shutdown)
