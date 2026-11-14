@@ -1,0 +1,9 @@
+name: rlm
+version: "0.1.0"
+description: "Recursive Language Model mode: corpus as `context` in a sandboxed persistent REPL (bwrap, no network/host fs); rlm_exec code cells fan slices to a sub-model via llm_query/llm_batch (auxiliary task rlm_subcall). Budgets and per-session trajectory JSONL."
+author: "Kevin Rajan <7121943+kvnloo@users.noreply.github.com>"
+license: MIT
+manifest_version: 2
+provides_tools:
+  - rlm_load
+  - rlm_exec
