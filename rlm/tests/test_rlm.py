@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,6 @@ def test_relative_paths_anchor_at_task_workspace_not_process_cwd(session, tmp_pa
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
-    monkeypatch.setattr("tools.file_tools_paths._resolve_base_dir", lambda task_id="default", **_: session.corpus_dir)
+    monkeypatch.setattr(rlm, "_CTX", SimpleNamespace(session_cwd=lambda: str(session.corpus_dir)))
     out = session.load(["b.txt"], task_id="t")
     assert out["files"] == 1 and "error" not in out

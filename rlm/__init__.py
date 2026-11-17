@@ -85,10 +85,12 @@ def _task_path(raw: str, task_id: str) -> str:
     if os.path.isabs(raw):
         return raw
     try:
-        from tools.file_tools_paths import _resolve_base_dir
-        return str(Path(_resolve_base_dir(task_id or "default")) / raw)
-    except Exception:
-        return os.path.abspath(raw)
+        base = _CTX.session_cwd()
+    except Exception as exc:
+        raise RuntimeError("RLM cannot resolve the session workspace for relative paths") from exc
+    if not isinstance(base, str) or not os.path.isabs(base):
+        raise RuntimeError("RLM requires an absolute session workspace for relative paths")
+    return str(Path(base) / raw)
 
 
 def load_corpus(paths, max_chars: int, task_id: str = "default"):
