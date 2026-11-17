@@ -102,12 +102,25 @@ accepts 64, 128, 256 or 512; default 128 keeps runs inexpensive.
 `size_tokens` is an explicitly labeled characters/4 estimate, not a
 tokenizer measurement. Repeating generation at the same path is byte-stable.
 
-For a bounded model-backed comparison, reuse the invocation above, replacing
-the manifest with `"$SYNTH/full.jsonl"`, adding
-`--arms base-truncated,fork-rlm --repeats 1`, and setting the result/output
-paths outside `"$SYNTH"`. `base-truncated` passes a head slice of the raw
-context directly to the root model; `fork-rlm` reads the file via RLM tools.
-Use `--base-context-chars` at least as large as the longest generated context
-to compare against *full* plain-context input, provided the selected model's
-window also fits. Otherwise label the baseline a truncation comparison.
+For a bounded model-backed comparison, with model-provider credentials and
+the source paths from the invocation above already configured:
+
+```sh
+OPS=/tmp/rlm-synthetic-ops
+python3 bench/paper_matrix.py "$SYNTH/full.jsonl" "$OPS/rows.jsonl" \
+  --ops-dir "$OPS" --home-template "$HOME_TEMPLATE" \
+  --released-source "$RELEASED_SOURCE" --released-python "$RELEASED_PYTHON" \
+  --fork-source "$FORK_SOURCE" --fork-python "$FORK_PYTHON" \
+  --nano-source "$NANO_SOURCE" \
+  --arms base-truncated,fork-rlm --repeats 1 \
+  --timeout 150 --max-turns 8 --max-subcalls 4
+```
+
+Do **not** add `--smallest-sniah`; that flag filters out every synthetic task.
+`base-truncated` passes a head slice of the raw context directly to the root
+model; `fork-rlm` reads the file via RLM tools. Use `--base-context-chars`
+at least as large as the longest generated context to compare against *full*
+plain-context input, provided the selected model's window also fits.
+Otherwise label the baseline a truncation comparison.
+
 No model runs or provider calls are needed for generation or the unit tests.
