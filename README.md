@@ -1,5 +1,23 @@
 # hermes-rlm
 
-Recursive Language Model (arXiv:2512.24601) plugin for Hermes Agent: the corpus lives as `context` in a sandboxed Python REPL; the root model inspects it with code and fans slices out to a sub-model via `ctx.llm`.
+Recursive Language Model (arXiv:2512.24601) plugin for Hermes Agent: a corpus becomes `context` in a persistent Python REPL; the root model inspects it with code and can pass slices to a sub-model through Hermes' LLM service.
 
 Status: experimental. See `bench/` and the z0evals study `rlm-paper-replication-v1`.
+
+## Install
+
+The repository root is the Hermes plugin directory (`plugin.yaml` and `__init__.py`); the implementation lives in `rlm/`. The normal sandbox requires Linux, `bwrap` (bubblewrap), and `/usr/bin/python3`. Load a host corpus using `rlm_load`, then inspect it with `rlm_exec`.
+
+## What it touches
+
+- **Tools**: `rlm_load`, `rlm_exec`.
+- **Auxiliary tasks**: `rlm_subcall`.
+- **Commands**: `rlm` (the Hermes status command).
+- **Hooks**: none.
+- **Middleware**: none.
+- **Reads**: `rlm_load` opens host files, directories, and glob matches requested by the model, relative to the task workspace for relative paths; it loads text on the host before handing it to the sandbox. The plugin also reads optional `RLM_*` environment settings for budgets and runtime behavior.
+- **Writes**: per-session trajectory JSONL at `<hermes home>/plugin-data/rlm/runs/<session>.jsonl`, or at the location set by `RLM_LOG_DIR`. Logs contain loaded paths, executed Python cell source, finals, and usage metadata; the plugin does not enforce private permissions on log files. Inspect local storage permissions before processing confidential material.
+- **Network**: `llm_query` and `llm_batch` call Hermes' `ctx.llm` provider, which may send prompts to a remote model. The default bubblewrap kernel has no direct network access. Setting `RLM_ALLOW_UNSANDBOXED=1` removes that network restriction.
+- **Credentials**: the plugin does not directly read provider keys or token stores; Hermes manages model credentials through `ctx.llm`. In unsandboxed mode, executed Python has the host process's access to environment variables and files, potentially including secrets.
+- **Subprocesses**: the plugin starts a persistent Python `kernel.py` subprocess per active session, normally via `bwrap` with a private `/tmp`, no network, and no arbitrary host filesystem access (read-only `/usr` is mounted). Kernels are killed on reload, cell timeout, and process exit. Missing sandbox prerequisites fail closed unless `RLM_ALLOW_UNSANDBOXED=1` is explicitly set; that fallback executes model-authored Python with host privileges and is intended **only for trusted local testing**.
+- **Telemetry**: no separate telemetry or usage-reporting endpoint. Hermes' provider handles model request accounting, and the plugin writes the local trajectory log described above.

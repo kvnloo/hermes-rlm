@@ -1,0 +1,16 @@
+name: rlm
+version: "0.1.0"
+description: "Recursive Language Model plugin for Hermes: host-side file loading, a persistent bubblewrap Python REPL, and Hermes-managed sub-model calls."
+author: "Kevin Rajan <7121943+kvnloo@users.noreply.github.com>"
+license: MIT
+manifest_version: 2
+api_version: 1
+homepage: https://github.com/kvnloo/hermes-rlm
+requires_hermes: ">=0.23.0"
+tags: [rlm, context, research, hermes]
+provides_tools:
+  - rlm_load
+  - rlm_exec
+provides_hooks: []
+provides_middleware: []
+requires_env: []
