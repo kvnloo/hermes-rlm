@@ -9,9 +9,11 @@ Hermes instance. The host's plugin validator separately probes the same entry po
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -128,6 +130,25 @@ class CatalogTests(unittest.TestCase):
             self.assertRegex(section, rf"(?m)^- \*\*{label}\*\*:")
         for token in ("RLM_ALLOW_UNSANDBOXED", "RLM_LOG_DIR", "ctx.llm", "bwrap"):
             self.assertIn(token, section)
+
+    def test_sandbox_fails_closed_unless_unsandboxed_opt_in(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "_hermes_rlm_sandbox_test", ROOT / "__init__.py",
+            submodule_search_locations=[str(ROOT)],
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        self.addCleanup(lambda: [sys.modules.pop(k) for k in tuple(sys.modules)
+                                 if k == spec.name or k.startswith(spec.name + ".")])
+        spec.loader.exec_module(module)
+        rlm = sys.modules[spec.name + ".rlm"]
+        with mock.patch.object(rlm.shutil, "which", return_value=None):
+            with mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "0"}):
+                with self.assertRaisesRegex(RuntimeError, "bubblewrap"):
+                    rlm.sandbox_argv()
+            with mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "1"}):
+                self.assertEqual(rlm.sandbox_argv()[0], sys.executable)
 
 
 if __name__ == "__main__":
