@@ -24,8 +24,10 @@ class FinalGate:
             previous = self.turns.get(session_id)
             if previous and (previous['task'], previous['turn']) == (task_id, turn_id):
                 return
+            # Session IDs outlive task IDs; a different task never inherits a load.
             self.turns[session_id] = {'task': task_id, 'turn': turn_id,
-                                     'loaded': bool(previous and previous['loaded']), 'final': None}
+                                     'loaded': bool(previous and previous['task'] == task_id
+                                                    and previous['loaded']), 'final': None}
         session = self.get_session(task_id, session_id)
         if session is not None:
             session.last_validated_final = None
