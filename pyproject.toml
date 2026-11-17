@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-rlm"
+version = "0.1.0"
+description = "Recursive Language Model plugin for Hermes Agent"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Kevin Rajan" }]
+keywords = ["hermes", "rlm", "recursive-language-model"]
+
+[project.urls]
+Homepage = "https://github.com/kvnloo/hermes-rlm"
+
+[tool.setuptools]
+packages = ["rlm"]
+
+[tool.setuptools.package-data]
+rlm = ["plugin.yaml"]

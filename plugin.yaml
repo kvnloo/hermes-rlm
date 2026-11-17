@@ -1,0 +1,11 @@
+name: rlm
+version: "0.1.0"
+description: "Recursive Language Model mode: sandboxed corpus REPL with bounded sub-model calls through Hermes"
+author: "Kevin Rajan <7121943+kvnloo@users.noreply.github.com>"
+license: MIT
+homepage: https://github.com/kvnloo/hermes-rlm
+manifest_version: 2
+api_version: 1
+provides_tools:
+  - rlm_load
+  - rlm_exec
