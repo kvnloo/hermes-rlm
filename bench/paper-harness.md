@@ -82,3 +82,32 @@ fleet-build --node mbp --light --src-include bench --wait 0 -- \
 ```
 
 The bounded single-file check is `python3 bench/test_paper_matrix.py`. It uses local fake HTTP responses and no model credentials. It covers the persistent cap, retry circuit, nano model routing, fresh homes, scoring hooks, hash logs, invalid-row resume, interleaving, prompt isolation, and detached-child timeout cleanup.
+
+## Offline synthetic long-context quick comparison
+
+Generate three small, deterministic, download-free tasks (needle retrieval,
+agent-to-project-to-locker multi-hop, and filtered integer aggregation).
+Only the evaluator manifest contains gold. The agent receives the generated
+unlabeled `context.txt`; all three tasks use the existing deterministic
+casefold/whitespace **exact** scorer (`browse_exact`), not an LLM judge.
+
+```sh
+SYNTH=/tmp/rlm-synthetic
+python -m bench.synthetic_long_context --out "$SYNTH" --records 128
+python -m unittest discover -s tests
+```
+
+`full.jsonl` and `smoke.jsonl` both contain these three tasks. `--records`
+accepts 64, 128, 256 or 512; default 128 keeps runs inexpensive.
+`size_tokens` is an explicitly labeled characters/4 estimate, not a
+tokenizer measurement. Repeating generation at the same path is byte-stable.
+
+For a bounded model-backed comparison, reuse the invocation above, replacing
+the manifest with `"$SYNTH/full.jsonl"`, adding
+`--arms base-truncated,fork-rlm --repeats 1`, and setting the result/output
+paths outside `"$SYNTH"`. `base-truncated` passes a head slice of the raw
+context directly to the root model; `fork-rlm` reads the file via RLM tools.
+Use `--base-context-chars` at least as large as the longest generated context
+to compare against *full* plain-context input, provided the selected model's
+window also fits. Otherwise label the baseline a truncation comparison.
+No model runs or provider calls are needed for generation or the unit tests.
