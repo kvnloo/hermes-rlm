@@ -124,3 +124,33 @@ def test_relative_paths_anchor_at_task_workspace_not_process_cwd(session, tmp_pa
     monkeypatch.setitem(sys.modules, 'tools.file_tools_paths', paths)
     out = session.load(["b.txt"], task_id="t")
     assert out["files"] == 1 and "error" not in out
+
+
+@pytest.mark.parametrize('overlap', ['repeated-file', 'directory-file', 'directory-glob'])
+def test_overlapping_corpus_inputs_count_unique_files_once(tmp_path, monkeypatch, overlap):
+    corpus_dir = tmp_path / 'corpus'
+    corpus_dir.mkdir()
+    source = corpus_dir / 'source.txt'
+    source.write_text('needle=42\n', encoding='utf-8')
+    binary = corpus_dir / 'binary.dat'
+    binary.write_bytes(b'\0binary')
+    paths = {
+        'repeated-file': [str(source), str(source)],
+        'directory-file': [str(corpus_dir), str(source)],
+        'directory-glob': [str(corpus_dir), str(corpus_dir / '*')],
+    }[overlap]
+    reads = []
+    original = Path.read_bytes
+
+    def record(path):
+        reads.append(path)
+        return original(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', record)
+    corpus, skipped = rlm.load_corpus(paths, len('needle=42\n'))
+    assert corpus == {'source.txt': 'needle=42\n'}
+    assert reads.count(source) == 1
+    assert skipped == (0 if overlap == 'repeated-file' else 1)
+    assert reads.count(binary) == skipped
+    with pytest.raises(ValueError, match='corpus exceeds'):
+        rlm.load_corpus(paths, len('needle=42\n') - 1)

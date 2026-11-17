@@ -113,6 +113,8 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
                 files.append(p)
             else:
                 raise FileNotFoundError(raw)
+    # Overlapping files, directories and globs must not consume the budget twice.
+    files = list(dict.fromkeys(files))
     common = os.path.commonpath([str(f.parent) for f in files]) if files else ""
     corpus, total, skipped = {}, 0, 0
     for f in files:
