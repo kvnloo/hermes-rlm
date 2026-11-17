@@ -38,6 +38,18 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
             self.gate.transform("ordinary reply", session_id="shared", turn_id="turn-b")
         )
 
+    def test_overlapping_previous_task_remains_fail_closed_until_its_end(self):
+        self.gate.begin(session_id="shared", task_id="task-b", turn_id="turn-b")
+        self.assertEqual(
+            self.gate.transform("old uncited reply", session_id="shared", turn_id="turn-a"),
+            WITHHELD,
+        )
+        self.gate.end(session_id="shared", turn_id="turn-a")
+        self.assertNotIn(("shared", "turn-a"), self.gate.turns)
+        self.assertIsNone(
+            self.gate.transform("new ordinary reply", session_id="shared", turn_id="turn-b")
+        )
+
     def test_same_task_new_turn_still_requires_fresh_validated_final(self):
         self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-next")
         self.assertEqual(

@@ -528,5 +528,6 @@ def register(ctx) -> None:
     ctx.register_hook('transform_llm_output', gate.transform)
     ctx.register_hook('on_session_start', reset_session)
     ctx.register_hook('on_session_reset', reset_session)
+    ctx.register_hook('on_session_end', gate.end)
     ctx.register_middleware('tool_execution', gate.execute)
     ctx.on_unload(_shutdown)
