@@ -25,3 +25,5 @@ The repository root is the Hermes plugin directory (`plugin.yaml` and `__init__.
 Protocol replies are read in byte chunks with a deadline, including partial lines and buffered multi-line replies. This is not a whole-operation hard deadline: stdin writes, host corpus I/O, provider calls, and process cleanup may still block. Reply-frame size is not independently capped.
 
 Unload retires detached Session instances: retained references cannot start another load or exec. Ordinary kernel kill remains restartable. This does not cancel an already-running provider call or independently block new host calls admitted after unload. A timeout observed after retirement reports a closed session, not a restart.
+
+`rlm_load` requires a `paths` array of strings. Missing or malformed paths are rejected before session lookup or mutation. An explicit empty array remains supported: it replaces the corpus with an empty mapping and resets kernel state. The lower-level `load_corpus` helper still accepts a single path string.

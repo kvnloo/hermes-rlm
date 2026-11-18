@@ -421,7 +421,10 @@ EXEC_SCHEMA = {
 
 def _load_handler(args: dict, **kw) -> str:
     try:
-        return json.dumps(session_for(**kw).load(args.get("paths") or [], kw.get("task_id") or "default"))
+        paths = args.get("paths")
+        if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+            raise ValueError("paths must be an array of strings")
+        return json.dumps(session_for(**kw).load(paths, kw.get("task_id") or "default"))
     except Exception as exc:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
