@@ -217,6 +217,12 @@ class Session:
         while True:
             reply = self._read(deadline)
             if reply["type"] == "done":
+                # Validate before leaving the guarded exchange: formatting an
+                # invalid completion later must not leave a live child attached.
+                for field in ("stdout", "error", "final"):
+                    value = reply.get(field)
+                    if value is not None and not isinstance(value, str):
+                        raise RuntimeError(f"invalid sandbox done field: {field}")
                 return reply
             self._send(self._serve_llm(reply), deadline)
 
