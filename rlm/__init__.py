@@ -234,6 +234,8 @@ class Session:
                 sent = os.write(fd, payload[:65536])
             except BlockingIOError:
                 continue
+            except BrokenPipeError:
+                raise RuntimeError("sandbox kernel exited") from None
             if sent <= 0:
                 raise RuntimeError("sandbox kernel write made no progress")
             payload = payload[sent:]
