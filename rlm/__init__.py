@@ -224,6 +224,8 @@ class Session:
                     if value is not None and not isinstance(value, str):
                         raise RuntimeError(f"invalid sandbox done field: {field}")
                 return reply
+            if reply["type"] != "llm":
+                raise RuntimeError("invalid sandbox frame type")
             self._send(self._serve_llm(reply), deadline)
 
     def _serve_llm(self, req: dict) -> dict:
