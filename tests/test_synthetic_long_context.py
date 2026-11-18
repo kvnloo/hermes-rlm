@@ -143,6 +143,22 @@ class SyntheticLongContextTests(unittest.TestCase):
             with self.subTest(records=invalid), self.assertRaises(ValueError):
                 generate(self.out, invalid)
 
+    def test_task_ids_are_unique_per_family_and_scale(self) -> None:
+        # Scales must not share ids: result rows and --task-ids select by id.
+        for n in SIZES:
+            got = sorted(task["id"] for task in self.tasks(n).values())
+            self.assertEqual(got, [f"synthetic-{f}-v1-{n}" for f in ("aggregation", "multihop", "needle")])
+
+    def test_second_scale_in_same_out_dir_keeps_first_scale_contexts(self) -> None:
+        generate(self.out, 64)
+        first = {t["id"]: t for t in read_jsonl(self.out / "full.jsonl")}
+        generate(self.out, 128)
+        for task in first.values():
+            with self.subTest(task=task["id"]):
+                text = Path(task["context_path"]).read_text(encoding="utf-8")
+                self.assertEqual(hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                                 task["metadata"]["context_sha256"])
+
     def test_cli_prints_summary_and_documented_default_scale(self) -> None:
         def run(*args: str) -> dict:
             buf = io.StringIO()
