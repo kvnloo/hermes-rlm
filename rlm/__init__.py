@@ -229,6 +229,8 @@ class Session:
             self._send(self._serve_llm(reply), deadline)
 
     def _serve_llm(self, req: dict) -> dict:
+        if "id" not in req:
+            raise RuntimeError("sandbox llm request missing id")
         prompts = req.get("prompts")
         if not isinstance(prompts, list) or not all(isinstance(p, str) for p in prompts):
             return {"type": "llm_result", "id": req["id"], "error":
