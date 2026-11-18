@@ -145,7 +145,7 @@ class Session:
         self.proc: subprocess.Popen | None = None
         self._read_buffer = b""
         self.context = None
-        self._closed = False
+        self._closing = False
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
         self.lock = threading.Lock()
@@ -155,7 +155,7 @@ class Session:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
     def _ensure_open(self) -> None:
-        if self._closed:
+        if self._closing:
             raise RuntimeError("RLM session is closed")
 
     def _spawn(self) -> None:
@@ -337,8 +337,8 @@ class Session:
                          "with `context` reloaded, other variables are gone"}
             except RuntimeError as exc:
                 self._teardown()
-                note = "session closed" if self._closed else "kernel restarted, variables lost"
-                self.stats["restarts"] += not self._closed
+                note = "session closed" if self._closing else "kernel restarted, variables lost"
+                self.stats["restarts"] += not self._closing
                 reply = {"stdout": "", "final": None, "error": f"{exc}; {note}"}
             except BaseException:
                 # Transport/decoding failure or interruption leaves reply framing
@@ -383,7 +383,7 @@ def _shutdown() -> None:
     with _sessions_lock:
         sessions = list(_sessions.values())
         for session in sessions:
-            session._closed = True
+            session._closing = True
         _sessions.clear()
     for session in sessions:
         try:
