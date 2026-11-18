@@ -145,6 +145,7 @@ class Session:
         self.proc: subprocess.Popen | None = None
         self._read_buffer = b""
         self.context = None
+        self._closed = False
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
         self.lock = threading.Lock()
@@ -153,11 +154,18 @@ class Session:
         with open(self.log_path, "a") as f:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("RLM session is closed")
+
     def _spawn(self) -> None:
+        self._ensure_open()
         self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
         try:
+            # Unload can race with Popen before the child is assigned to proc.
+            self._ensure_open()
             if self.context is not None:
                 self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
         except BaseException:
@@ -295,8 +303,10 @@ class Session:
         return {"type": "llm_result", "id": req["id"], "results": [t for t, _ in out]}
 
     def load(self, paths, task_id: str = "default") -> dict:
+        self._ensure_open()
         corpus, skipped = load_corpus(paths, self.lim["max_corpus_chars"], task_id)
         with self.lock:
+            self._ensure_open()
             self._teardown()
             self.context = next(iter(corpus.values())) if len(corpus) == 1 else corpus
             self._spawn()
@@ -310,6 +320,7 @@ class Session:
     def exec(self, code: str) -> dict:
         lim = self.lim
         with self.lock:
+            self._ensure_open()
             if self.proc is None or self.proc.poll() is not None:
                 self._spawn()
             t0 = time.monotonic()
@@ -368,6 +379,8 @@ def session_for(task_id: str = "", session_id: str = "", **_kw) -> Session:
 def _shutdown() -> None:
     with _sessions_lock:
         sessions = list(_sessions.values())
+        for session in sessions:
+            session._closed = True
         _sessions.clear()
     for session in sessions:
         try:
