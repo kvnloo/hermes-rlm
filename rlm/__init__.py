@@ -170,9 +170,8 @@ class Session:
             raise
 
     def kill(self) -> None:
-        """Close the session for good, from any thread. An exchange in flight owns the pipes, so
-        it only gets the child killed and tears itself down on the resulting EOF."""
-        self._closing = True
+        """Kill the kernel, from any thread; only _shutdown retires the session (the next exec respawns).
+        An exchange in flight owns the pipes, so it only gets the child killed and tears itself down on the resulting EOF."""
         proc = self.proc
         if proc is not None and proc.poll() is None:
             proc.kill()
@@ -376,6 +375,8 @@ def session_for(task_id: str = "", session_id: str = "", **_kw) -> Session:
 def _shutdown() -> None:
     with _sessions_lock:
         sessions = list(_sessions.values())
+        for session in sessions:
+            session._closing = True
         _sessions.clear()
     for session in sessions:
         try:
