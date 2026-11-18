@@ -396,12 +396,15 @@ def _exec_handler(args: dict, **kw) -> str:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-def _rlm_command(raw_args: str = "", **_kw) -> str:
+def _rlm_command(raw_args: str = "", session_id: str = "", **_kw) -> str:
+    header = "RLM limits: " + json.dumps(limits())
+    if not isinstance(session_id, str) or not session_id:
+        return header + "\nHost session_id required to show RLM session diagnostics"
     profile = str(_data_dir())
     with _sessions_lock:
         rows = [f"{k}: {v.stats} log={v.log_path}" for k, v in _sessions.items()
-                if k[0] == profile]
-    return "RLM limits: " + json.dumps(limits()) + ("\n" + "\n".join(rows) if rows else "\nno RLM sessions yet")
+                if k[0] == profile and k[2] == session_id]
+    return header + ("\n" + "\n".join(rows) if rows else "\nno RLM sessions yet")
 
 
 def _data_dir() -> Path:
