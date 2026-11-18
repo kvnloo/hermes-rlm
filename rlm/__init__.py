@@ -305,16 +305,18 @@ class Session:
                 self.stats["restarts"] += 1
                 raise
             self.stats["cells"] += 1
+            subcalls_used = self.stats["subcalls"]
+            subcalls_this_cell = subcalls_used - before["subcalls"]
         out = reply.get("stdout") or ""
         shown = out if len(out) <= lim["max_output_chars"] else (
             out[: lim["max_output_chars"]] + f"\n... [{len(out) - lim['max_output_chars']} more chars truncated;"
             " keep large values in variables and print summaries]")
         ms = int((time.monotonic() - t0) * 1000)
         self.log("cell", code=code, stdout_chars=len(out), error=reply.get("error"), ms=ms,
-                 final=reply.get("final"), subcalls=self.stats["subcalls"] - before["subcalls"])
+                 final=reply.get("final"), subcalls=subcalls_this_cell)
         result = {"stdout": shown, "error": reply.get("error"), "ms": ms,
-                  "subcalls_this_cell": self.stats["subcalls"] - before["subcalls"],
-                  "budget": {"subcalls_used": self.stats["subcalls"], "subcalls_max": lim["max_subcalls"]}}
+                  "subcalls_this_cell": subcalls_this_cell,
+                  "budget": {"subcalls_used": subcalls_used, "subcalls_max": lim["max_subcalls"]}}
         if reply.get("final") is not None:
             result["final"] = reply["final"]
         return result
