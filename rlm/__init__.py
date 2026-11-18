@@ -189,17 +189,34 @@ class Session:
                     raise RuntimeError("sandbox kernel exited")
                 self._read_buffer += chunk
 
-    def _send(self, msg: dict) -> None:
-        self.proc.stdin.write(json.dumps(msg) + "\n")
-        self.proc.stdin.flush()
+    def _send(self, msg: dict, deadline: float) -> None:
+        payload = memoryview((json.dumps(msg) + "\n").encode("utf-8"))
+        fd = self.proc.stdin.fileno()
+        # This is the sole stdin writer. Avoid TextIOWrapper buffering/flush,
+        # which can block indefinitely when a live child stops reading.
+        os.set_blocking(fd, False)
+        while payload:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError
+            _, ready, _ = select.select([], [fd], [], min(left, 1.0))
+            if not ready:
+                continue
+            try:
+                sent = os.write(fd, payload[:65536])
+            except BlockingIOError:
+                continue
+            if sent <= 0:
+                raise RuntimeError("sandbox kernel write made no progress")
+            payload = payload[sent:]
 
     def _request(self, msg: dict, deadline: float) -> dict:
-        self._send(msg)
+        self._send(msg, deadline)
         while True:
             reply = self._read(deadline)
             if reply["type"] == "done":
                 return reply
-            self._send(self._serve_llm(reply))
+            self._send(self._serve_llm(reply), deadline)
 
     def _serve_llm(self, req: dict) -> dict:
         prompts = req.get("prompts")
