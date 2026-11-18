@@ -148,5 +148,34 @@ class RlmUnitTests(unittest.TestCase):
             self.assertEqual(session.stats["subcalls"], 0)
 
 
+    def test_prompt_cap_token_clamp_and_error_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            seen: list[tuple[str, int]] = []
+
+            def subcall(prompt: str, max_tokens: int):
+                seen.append((prompt, max_tokens))
+                if prompt == "boom":
+                    raise RuntimeError("down")
+                return prompt, {"prompt_tokens": 3, "completion_tokens": 2}
+
+            session = rlm.Session("ci-cap", subcall=subcall, log_dir=Path(temp))
+            session.lim["max_prompt_chars"] = 4
+            # at the cap is allowed; one over refuses the whole batch untouched
+            refused = session._serve_llm({"id": 1, "prompts": ["ok", "12345"], "max_tokens": 9})
+            self.assertIn("RLM_MAX_PROMPT_CHARS=4", refused["error"])
+            self.assertEqual((seen, session.stats["subcalls"]), ([], 0))
+            ok = session._serve_llm({"id": 2, "prompts": ["1234", "boom"], "max_tokens": 99_999})
+            self.assertEqual(ok["results"][0], "1234")
+            self.assertEqual(ok["results"][1], "[llm_query error: RuntimeError: down]")
+            self.assertEqual({t for _, t in seen}, {32_000})  # clamped
+            self.assertEqual(session.stats["subcalls"], 2)
+            self.assertEqual(session.stats["subcall_prompt_chars"], 8)
+            self.assertEqual(session.stats["prompt_tokens"], 3)
+            self.assertEqual(session.stats["completion_tokens"], 2)
+            seen.clear()
+            session._serve_llm({"id": 3, "prompts": ["a"]})  # no max_tokens -> default
+            self.assertEqual(seen, [("a", session.lim["subcall_max_tokens"])])
+
+
 if __name__ == "__main__":
     unittest.main()
