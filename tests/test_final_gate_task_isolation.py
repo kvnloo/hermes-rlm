@@ -58,6 +58,18 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
         )
 
 
+    def test_load_continuity_is_remembered_per_task_without_live_session(self):
+        # Pins the `latest` pointer: the host session is gone, only gate state remains.
+        self.loaded_session.context = None
+        self.gate.end(session_id="shared", turn_id="turn-a")
+        self.assertEqual(
+            self.gate.transform("stale", session_id="shared", turn_id="turn-a"), WITHHELD)
+        self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-next")
+        self.assertEqual(
+            self.gate.transform("uncited", session_id="shared", turn_id="turn-next"), WITHHELD)
+        self.gate.begin(session_id="shared", task_id="task-b", turn_id="turn-b")
+        self.assertIsNone(self.gate.transform("plain", session_id="shared", turn_id="turn-b"))
+
     def test_validated_final_released_for_its_turn_only_under_overlap(self):
         final = {"answer": "42", "citations": [{"source": "evidence.txt", "start": 0, "end": 2, "quote": "ev"}]}
 
