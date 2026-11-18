@@ -63,9 +63,11 @@ class PackagingTests(unittest.TestCase):
                 self.tools: list[str] = []
                 self.tasks: list[str] = []
                 self.commands: list[str] = []
+                self.bound: dict[str, tuple] = {}
 
             def register_tool(self, name: str, *args, **kwargs) -> None:
                 self.tools.append(name)
+                self.bound[name] = args[1:3]
 
             def register_auxiliary_task(self, name: str, **kwargs) -> None:
                 self.tasks.append(name)
@@ -76,6 +78,9 @@ class PackagingTests(unittest.TestCase):
         ctx = RecordingContext()
         entry.register(ctx)
         self.assertCountEqual(ctx.tools, ["rlm_load", "rlm_exec"])
+        rlm_mod = sys.modules[module_name + ".rlm"]
+        self.assertEqual(ctx.bound["rlm_load"], (rlm_mod.LOAD_SCHEMA, rlm_mod._load_handler))
+        self.assertEqual(ctx.bound["rlm_exec"], (rlm_mod.EXEC_SCHEMA, rlm_mod._exec_handler))
         self.assertEqual(ctx.tasks, ["rlm_subcall"])
         self.assertEqual(ctx.commands, ["rlm"])
 
