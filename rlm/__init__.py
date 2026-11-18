@@ -171,6 +171,12 @@ class Session:
                 self.proc.kill()
                 self.proc.wait()
         finally:
+            if self.proc:
+                for pipe in (self.proc.stdin, self.proc.stdout):
+                    try:
+                        pipe.close()
+                    except OSError:
+                        pass
             self.proc = None
             self._read_buffer = b""
 
