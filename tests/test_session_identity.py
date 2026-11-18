@@ -22,7 +22,7 @@ class SessionIdentityTests(unittest.TestCase):
         pairs = [('tenant/a', 's'), ('tenanta', 's'), ('tenant:a', 's'),
                  ('x' * 80 + 'a', 's'), ('x' * 80 + 'b', 's'),
                  ('shared-task', 'one'), ('shared-task', 'two'),
-                 ('same', ''), ('', 'same'), ('', ''), ('default', ''),
+                 ('same', ''), ('', 'same'), ('default', ''),
                  ('surrogate\ud800', 's'), ('surrogate\ud801', 's')]
         sessions = [rlm.session_for(task, session) for task, session in pairs]
         self.assertEqual(len({id(s) for s in sessions}), len(pairs))

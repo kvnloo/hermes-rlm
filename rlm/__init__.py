@@ -269,6 +269,8 @@ _sessions_lock = threading.Lock()
 
 
 def session_for(task_id: str = "", session_id: str = "", **_kw) -> Session:
+    if not task_id and not session_id:
+        raise ValueError("RLM requires a host task_id or session_id")
     key = (str(_data_dir()), str(task_id), str(session_id))
     with _sessions_lock:
         if key not in _sessions:
