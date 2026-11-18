@@ -20,7 +20,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PackagingTests(unittest.TestCase):
     def test_installed_distribution_ships_runtime_and_manifest(self) -> None:
-        dist = importlib.metadata.distribution("hermes-rlm")
+        # Search installed metadata only: `pip install .` leaves a source-tree
+        # hermes_rlm.egg-info that cwd on sys.path would otherwise shadow.
+        path = [p for p in sys.path if p and Path(p).resolve() != ROOT]
+        found = list(importlib.metadata.distributions(name="hermes-rlm", path=path))
+        self.assertTrue(found, "hermes-rlm not installed; run `python -m pip install .` first")
+        dist = found[0]
         self.assertEqual(dist.version, "0.1.0")
         installed = {str(path).replace("\\", "/") for path in (dist.files or ())}
         self.assertIn("rlm/__init__.py", installed)
