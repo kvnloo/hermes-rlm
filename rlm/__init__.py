@@ -206,9 +206,16 @@ class Session:
             return {"type": "llm_result", "id": req["id"], "error":
                     f"prompt of {big} chars exceeds RLM_MAX_PROMPT_CHARS={lim['max_prompt_chars']}; "
                     "split the slice into smaller chunks"}
+        tokens, cap = req.get("max_tokens"), lim["subcall_max_tokens"]
+        # Preserve the catalog API's integer-zero default without accepting
+        # falsey containers or booleans as token counts.
+        if tokens is None or (type(tokens) is int and tokens == 0):
+            tokens = cap
+        if type(tokens) is not int or tokens < 1 or type(cap) is not int or cap < 1:
+            return {"type": "llm_result", "id": req["id"], "error":
+                    "max_tokens and RLM_SUBCALL_MAX_TOKENS must be a positive integer"}
+        max_tokens = min(tokens, cap, 32_000)
         self.stats["subcalls"] += len(prompts)
-        max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]),
-                         lim["subcall_max_tokens"], 32_000)
 
         def one(prompt: str):
             t0 = time.monotonic()
