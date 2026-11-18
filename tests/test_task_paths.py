@@ -1,4 +1,5 @@
 """Host corpus paths must never silently fall back to a gateway's cwd."""
+import json
 import os
 from pathlib import Path
 import sys
@@ -65,6 +66,13 @@ class TaskPathTests(unittest.TestCase):
                 self.assertEqual(skipped, 0)
         self.assertEqual(resolver.call_count, 3)
         self.legacy.assert_not_called()
+
+    def test_load_handler_returns_json_error_on_unresolvable_workspace(self):
+        self.context(mock.Mock(side_effect=RuntimeError('resolver unavailable')))
+        session = SimpleNamespace(load=lambda paths, task_id: rlm.load_corpus(paths, 100, task_id))
+        with mock.patch.object(rlm, 'session_for', return_value=session):
+            out = json.loads(rlm._load_handler({'paths': ['corpus.txt']}, task_id='task-a'))
+        self.assertIn('session workspace', out['error'])
 
     def test_explicit_absolute_path_needs_no_context(self):
         with mock.patch.object(rlm, '_CTX', None):
