@@ -118,6 +118,28 @@ class SyntheticLongContextTests(unittest.TestCase):
                 target = re.search(r"agent (AG-\d{4})", task["question"]).group(1)
                 self.assertEqual(lockers[projects[agents[target]]], task["gold"])
 
+    def test_multihop_chain_is_not_identity_and_seal_is_only_in_locker_table(self) -> None:
+        for n in SIZES:
+            with self.subTest(records=n):
+                task = self.tasks(n)["synthetic-multihop"]
+                context = Path(task["context_path"]).read_text()
+                agent = re.search(r"agent (AG-\d{4})", task["question"]).group(1)
+                project = re.search(rf"agent={agent} \| project=(PR-\d{{4}})", context).group(1)
+                locker = re.search(rf"project={project} \| locker=(LK-\d{{4}})", context).group(1)
+                suffixes = {x.split("-")[1] for x in (agent, project, locker)}
+                self.assertEqual(len(suffixes), 3)  # identity joins would collapse this
+                self.assertEqual(context.count(task["gold"]), 1)
+                self.assertTrue(re.search(rf"^LOCKER \| locker={locker} \| seal={task['gold']}", context, re.M))
+
+    def test_needle_target_sits_in_final_tenth_of_ledger(self) -> None:
+        for n in SIZES:
+            with self.subTest(records=n):
+                task = self.tasks(n)["synthetic-needle"]
+                lines = Path(task["context_path"]).read_text().splitlines()
+                rows = [line for line in lines if "ticket=T-" in line]
+                hit = next(i for i, line in enumerate(rows) if task["gold"] in line)
+                self.assertGreaterEqual(hit, len(rows) * 9 // 10)
+
     def test_aggregation_gold_matches_an_independent_row_parser(self) -> None:
         for n in SIZES:
             with self.subTest(records=n):
