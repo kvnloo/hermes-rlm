@@ -331,10 +331,11 @@ class Session:
                 reply = self._request({"type": "exec", "code": code}, t0 + lim["cell_timeout_s"])
             except TimeoutError:
                 self._teardown()
-                self.stats["restarts"] += 1
+                self.stats["restarts"] += not self._closing
+                note = ("session closed" if self._closing else
+                        "kernel restarted with `context` reloaded, other variables are gone")
                 reply = {"stdout": "", "final": None, "error":
-                         f"cell exceeded {lim['cell_timeout_s']}s and was killed; kernel restarted "
-                         "with `context` reloaded, other variables are gone"}
+                         f"cell exceeded {lim['cell_timeout_s']}s and was killed; {note}"}
             except RuntimeError as exc:
                 self._teardown()
                 note = "session closed" if self._closing else "kernel restarted, variables lost"
