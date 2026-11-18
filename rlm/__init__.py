@@ -141,6 +141,7 @@ class Session:
         self.log_path = log_dir / f"{digest}.jsonl"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.proc: subprocess.Popen | None = None
+        self._read_buffer = b""
         self.context = None
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
@@ -151,6 +152,7 @@ class Session:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
     def _spawn(self) -> None:
+        self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
         try:
@@ -168,18 +170,24 @@ class Session:
                 self.proc.wait()
         finally:
             self.proc = None
+            self._read_buffer = b""
 
     def _read(self, deadline: float) -> dict:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
                 raise TimeoutError
+            if b"\n" in self._read_buffer:
+                line, self._read_buffer = self._read_buffer.split(b"\n", 1)
+                return json.loads(line)
             ready, _, _ = select.select([self.proc.stdout], [], [], min(left, 1.0))
             if ready:
-                line = self.proc.stdout.readline()
-                if not line:
+                # Only this reader consumes stdout; do not enter TextIOWrapper
+                # readline(), which can wait past the deadline for a newline.
+                chunk = os.read(self.proc.stdout.fileno(), 65536)
+                if not chunk:
                     raise RuntimeError("sandbox kernel exited")
-                return json.loads(line)
+                self._read_buffer += chunk
 
     def _send(self, msg: dict) -> None:
         self.proc.stdin.write(json.dumps(msg) + "\n")
