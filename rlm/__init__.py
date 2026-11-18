@@ -123,10 +123,12 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
             skipped += 1
             continue
         text = data.decode("utf-8", "replace")
-        total += len(text)
+        source = os.path.relpath(f, common) if common else str(f)
+        # Match the retained mapping: later text replaces the same source key.
+        total += len(text) - len(corpus.get(source, ""))
         if total > max_chars:
             raise ValueError(f"corpus exceeds RLM_MAX_CORPUS_CHARS={max_chars}")
-        corpus[os.path.relpath(f, common) if common else str(f)] = text
+        corpus[source] = text
     return corpus, skipped
 
 
