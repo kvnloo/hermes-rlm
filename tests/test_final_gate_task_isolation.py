@@ -142,6 +142,18 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
         self.gate.execute(lambda _: json.dumps({"out": "x"}), "rlm_exec", {}, **ids)
         self.assertEqual(self.gate.transform("x", session_id="shared", turn_id="turn-a"), WITHHELD)
 
+    def test_overlapping_same_task_turn_revokes_older_turns_validated_final(self):
+        final = {"answer": "42", "citations": []}
+
+        def run_exec(_):
+            self.loaded_session.last_validated_final = final
+            return json.dumps({"final": "42"})
+
+        self.gate.execute(run_exec, "rlm_exec", {},
+                          task_id="task-a", session_id="shared", turn_id="turn-a")
+        self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-a2")
+        self.assertEqual(self.gate.transform("x", session_id="shared", turn_id="turn-a"), WITHHELD)
+
     def test_rlm_tool_with_mismatched_identity_is_refused_without_running(self):
         calls = []
         for ids in (("task-b", "turn-a"), ("task-a", "turn-x")):
