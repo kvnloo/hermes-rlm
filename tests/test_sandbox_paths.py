@@ -1,4 +1,5 @@
-"""Pins sandbox_argv, _task_path and _data_dir; host modules and the machine are faked, never relied on."""
+"""Pins sandbox_argv, _task_path and _data_dir; host modules and the machine are faked, never relied on.
+Deliberately omits the env escape hatch and relative-path fallback: sibling PRs #4/#3/#6 change them."""
 import os
 import sys
 import types
@@ -29,43 +30,18 @@ class SandboxArgvTests(unittest.TestCase):
             "--ro-bind", k, "/rlm/kernel.py", "--chdir", "/tmp",
             "--setenv", "PYTHONDONTWRITEBYTECODE", "1", "/usr/bin/python3", "-I", "/rlm/kernel.py"])
 
-    def test_unsandboxed_only_when_flag_is_exactly_1(self):
-        self.assertEqual(self.argv(bwrap=None, env={"RLM_ALLOW_UNSANDBOXED": "1"}),
-                         [sys.executable, "-I", str(rlm.KERNEL)])
-        for v in ("0", "true", ""):
-            with self.subTest(v=v), self.assertRaisesRegex(RuntimeError, "bubblewrap"):
-                self.argv(bwrap=None, env={"RLM_ALLOW_UNSANDBOXED": v})
-
     def test_missing_bwrap_or_python_never_returns_bwrap_argv(self):
         with self.assertRaises(RuntimeError):
             self.argv(bwrap=None)
         with self.assertRaises(RuntimeError):
             self.argv(py_exists=False)
-        self.assertEqual(self.argv(py_exists=False, env={"RLM_ALLOW_UNSANDBOXED": "1"})[0], sys.executable)
 
 
 class TaskPathTests(unittest.TestCase):
-    def mods(self, resolver):
-        return {"tools": fake(), "tools.file_tools_paths": fake(_resolve_base_dir=resolver)}
-
     def test_absolute_passes_through_and_tilde_expands(self):
         with mock.patch.dict(os.environ, {"HOME": "/home/x"}):
             self.assertEqual(rlm._task_path("/a/b", "t"), "/a/b")
             self.assertEqual(rlm._task_path("~/c", "t"), "/home/x/c")
-
-    def test_relative_anchors_at_task_workspace(self):
-        seen = []
-        with mock.patch.dict(sys.modules, self.mods(lambda t: seen.append(t) or "/ws")):
-            self.assertEqual(rlm._task_path("d/e.txt", "t1"), "/ws/d/e.txt")
-            self.assertEqual(rlm._task_path("f", ""), "/ws/f")
-        self.assertEqual(seen, ["t1", "default"])
-
-    def test_falls_back_to_cwd_when_host_missing_or_raising(self):
-        def boom(_t):
-            raise RuntimeError
-        for mods in ({"tools.file_tools_paths": None}, self.mods(boom)):
-            with self.subTest(), mock.patch.dict(sys.modules, mods):
-                self.assertEqual(rlm._task_path("g", "t"), os.path.abspath("g"))
 
 
 class DataDirTests(unittest.TestCase):
