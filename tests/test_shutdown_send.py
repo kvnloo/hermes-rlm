@@ -22,6 +22,8 @@ class ShutdownSendTests(unittest.TestCase):
             reply = s.exec('print(llm_query("hi"))')
         self.assertIn('kernel exited', reply['error'])
         self.assertIsNone(s.proc)
+        self.assertEqual(s.stats['restarts'], 0)  # shutdown is not a crash restart
+        self.assertNotIn('restarted', reply['error'])
 
 
 if __name__ == '__main__':

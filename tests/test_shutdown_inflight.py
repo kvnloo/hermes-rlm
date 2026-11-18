@@ -40,6 +40,7 @@ class ShutdownInflightTests(unittest.TestCase):
         self.assertNotIn('exc', out)
         self.assertIn('kernel exited', out['reply']['error'])
         self.assertIsNone(s.proc)
+        self.assertEqual(s.stats['restarts'], 0)
         self.assertTrue(proc.stdin.closed and proc.stdout.closed)
 
     def test_shutdown_during_spawn_leaves_no_child(self):

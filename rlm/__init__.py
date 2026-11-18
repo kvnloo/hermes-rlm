@@ -331,8 +331,9 @@ class Session:
                          "with `context` reloaded, other variables are gone"}
             except RuntimeError as exc:
                 self._teardown()
-                self.stats["restarts"] += 1
-                reply = {"stdout": "", "final": None, "error": f"{exc}; kernel restarted, variables lost"}
+                note = "session closed" if self._closing else "kernel restarted, variables lost"
+                self.stats["restarts"] += not self._closing
+                reply = {"stdout": "", "final": None, "error": f"{exc}; {note}"}
             except BaseException:
                 # Transport/decoding failure or interruption leaves reply framing
                 # uncertain. Never let the next cell reuse that child.
