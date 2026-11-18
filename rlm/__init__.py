@@ -148,6 +148,7 @@ class Session:
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
         self.lock = threading.Lock()
+        self._closing = False
 
     def log(self, event: str, **data) -> None:
         with open(self.log_path, "a") as f:
@@ -157,6 +158,9 @@ class Session:
         self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        if self._closing:  # session was killed (shutdown): never spawn a child for it again
+            self._teardown()
+            raise RuntimeError("session closed")
         try:
             if self.context is not None:
                 self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
@@ -166,8 +170,9 @@ class Session:
             raise
 
     def kill(self) -> None:
-        """Stop the kernel from any thread. An exchange in flight owns the pipes, so
+        """Close the session for good, from any thread. An exchange in flight owns the pipes, so
         it only gets the child killed and tears itself down on the resulting EOF."""
+        self._closing = True
         proc = self.proc
         if proc is not None and proc.poll() is None:
             proc.kill()

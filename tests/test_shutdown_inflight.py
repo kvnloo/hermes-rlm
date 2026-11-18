@@ -42,6 +42,39 @@ class ShutdownInflightTests(unittest.TestCase):
         self.assertIsNone(s.proc)
         self.assertTrue(proc.stdin.closed and proc.stdout.closed)
 
+    def test_shutdown_during_spawn_leaves_no_child(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for p in (mock.patch.object(rlm, '_sessions', {}),
+                  mock.patch.object(rlm, '_data_dir', return_value=Path(tmp.name) / 'profile'),
+                  mock.patch.dict(rlm.os.environ, {'RLM_LOG_DIR': tmp.name})):
+            p.start()
+            self.addCleanup(p.stop)
+        s = rlm.session_for(task_id='t', session_id='spawning')
+        inside, gate, spawn = threading.Event(), threading.Event(), s._spawn
+        def slow_spawn():
+            inside.set()
+            gate.wait(10)
+            spawn()
+        s._spawn = slow_spawn
+        out = {}
+        def run():
+            try:
+                out['reply'] = s.exec('1')
+            except BaseException as exc:
+                out['exc'] = exc
+        t = threading.Thread(target=run)
+        t.start()
+        self.addCleanup(lambda: s.proc and s.proc.kill())
+        self.assertTrue(inside.wait(10))
+        rlm._shutdown()
+        gate.set()
+        t.join(10)
+        self.assertFalse(t.is_alive())
+        self.assertIsInstance(out.get('exc'), RuntimeError)
+        self.assertIn('session closed', str(out['exc']))
+        self.assertIsNone(s.proc)
+
 
 if __name__ == '__main__':
     unittest.main()
