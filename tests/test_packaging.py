@@ -98,6 +98,18 @@ class RlmUnitTests(unittest.TestCase):
             self.assertEqual(corpus, {"a.txt": "alpha"})
             self.assertEqual(skipped, 1)
 
+    def test_load_corpus_enforces_char_cap_and_skips_git_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "a.txt").write_text("alpha", encoding="utf-8")
+            (root / "b.txt").write_text("beta!", encoding="utf-8")
+            (root / ".git").mkdir()
+            (root / ".git" / "config").write_text("secret", encoding="utf-8")
+            corpus, _ = rlm.load_corpus([str(root)], max_chars=10)
+            self.assertEqual(sorted(corpus), ["a.txt", "b.txt"])
+            with self.assertRaisesRegex(ValueError, "RLM_MAX_CORPUS_CHARS=9"):
+                rlm.load_corpus([str(root)], max_chars=9)
+
     def test_subcall_budget_enforced_without_sandbox(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             session = rlm.Session(
