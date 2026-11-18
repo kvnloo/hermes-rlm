@@ -55,6 +55,7 @@ class SyntheticLongContextTests(unittest.TestCase):
                     hashlib.sha256(context.encode("utf-8")).hexdigest(),
                 )
                 self.assertNotIn("ANSWER:", context)
+                self.assertNotIn(task["question"], context)
                 self.assertNotIn(str(task["gold"]), task["question"])
                 self.assertEqual(task["scoring"], "browse_exact")
                 self.assertEqual(score_task(task, f"Reasoning\nANSWER: {task['gold']}"), 1.0)
