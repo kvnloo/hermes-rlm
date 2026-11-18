@@ -162,10 +162,12 @@ class Session:
             raise
 
     def kill(self) -> None:
-        if self.proc and self.proc.poll() is None:
-            self.proc.kill()
-            self.proc.wait()
-        self.proc = None
+        try:
+            if self.proc and self.proc.poll() is None:
+                self.proc.kill()
+                self.proc.wait()
+        finally:
+            self.proc = None
 
     def _read(self, deadline: float) -> dict:
         while True:

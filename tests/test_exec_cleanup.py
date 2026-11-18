@@ -42,6 +42,16 @@ class ExecCleanupTests(unittest.TestCase):
                     self.assertIsNone(session.proc)
                     self.assertEqual(session.stats['restarts'], 1)
 
+    def test_interrupt_while_reaping_still_detaches_child(self):
+        with tempfile.TemporaryDirectory() as root:
+            session = rlm.Session('test', log_dir=Path(root))
+            proc = session.proc = mock.Mock()
+            proc.poll.return_value = None
+            proc.wait.side_effect = KeyboardInterrupt
+            with self.assertRaises(KeyboardInterrupt):
+                session.kill()
+            self.assertIsNone(session.proc)
+
     def test_kernel_reported_cell_error_does_not_discard_healthy_child(self):
         with tempfile.TemporaryDirectory() as root:
             session = rlm.Session('test', log_dir=Path(root))
