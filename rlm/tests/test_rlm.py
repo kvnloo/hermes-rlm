@@ -154,3 +154,45 @@ def test_overlapping_corpus_inputs_count_unique_files_once(tmp_path, monkeypatch
     assert reads.count(binary) == skipped
     with pytest.raises(ValueError, match='corpus exceeds'):
         rlm.load_corpus(paths, len('needle=42\n') - 1)
+
+
+def test_source_key_budget_counts_dotdot_replacement_once(tmp_path):
+    source = tmp_path / 'z.txt'
+    source.write_text('abcd')
+    sub = tmp_path / 'sub'
+    sub.mkdir()
+    paths = [str(source), str(sub / '..' / 'z.txt')]
+    assert rlm.load_corpus(paths, 4) == ({'z.txt': 'abcd'}, 0)
+    with pytest.raises(ValueError, match='RLM_MAX_CORPUS_CHARS=3'):
+        rlm.load_corpus(paths, 3)
+
+
+def test_source_key_budget_preserves_distinct_symlink_citations(tmp_path):
+    source = tmp_path / 'z.txt'
+    source.write_text('abcd')
+    alias = tmp_path / 'a.txt'
+    alias.symlink_to(source)
+    for paths in ([str(source), str(alias)], [str(alias), str(source)]):
+        corpus, skipped = rlm.load_corpus(paths, 8)
+        assert corpus == {'z.txt': 'abcd', 'a.txt': 'abcd'} and skipped == 0
+        with pytest.raises(ValueError, match='RLM_MAX_CORPUS_CHARS=7'):
+            rlm.load_corpus(paths, 7)
+        s = rlm.Session('citations', log_dir=tmp_path / 'runs')
+        s.sources = corpus
+        for name in corpus:
+            assert s._validate_final('answer', [{'source': name, 'start': 0, 'end': 4}])[0]['source'] == name
+
+
+def test_source_key_budget_replacement_keeps_last_content(tmp_path):
+    # link/.. follows the symlink at filesystem level, but relpath collapses
+    # it lexically. Preserve the existing last-value-wins corpus behavior.
+    root, other = tmp_path / 'root', tmp_path / 'other'
+    root.mkdir()
+    (other / 'sub').mkdir(parents=True)
+    (root / 'z.txt').write_text('old')
+    (other / 'z.txt').write_text('new!')
+    (root / 'link').symlink_to(other / 'sub', target_is_directory=True)
+    paths = [str(root / 'z.txt'), str(root / 'link' / '..' / 'z.txt')]
+    assert rlm.load_corpus(paths, 4) == ({'z.txt': 'new!'}, 0)
+    with pytest.raises(ValueError, match='RLM_MAX_CORPUS_CHARS=3'):
+        rlm.load_corpus(paths, 3)
