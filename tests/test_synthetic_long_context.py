@@ -11,6 +11,7 @@ import io
 import json
 from pathlib import Path
 import re
+import shlex
 import sys
 import tempfile
 import unittest
@@ -158,6 +159,24 @@ class SyntheticLongContextTests(unittest.TestCase):
                 text = Path(task["context_path"]).read_text(encoding="utf-8")
                 self.assertEqual(hashlib.sha256(text.encode("utf-8")).hexdigest(),
                                  task["metadata"]["context_sha256"])
+
+    def test_documented_matrix_command_parses(self) -> None:
+        # The harness doc's model-backed command must stay valid for the real CLI.
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root / "bench"))
+        self.addCleanup(sys.path.pop, 0)
+        from paper_matrix import ARMS, parser
+
+        doc = (root / "bench" / "paper-harness.md").read_text(encoding="utf-8")
+        block = re.search(r"(python3 bench/paper_matrix\.py \"\$SYNTH/full\.jsonl\".*?)\n```", doc, re.S)
+        self.assertIsNotNone(block, "synthetic matrix command missing from paper-harness.md")
+        argv = shlex.split(block.group(1).replace("\\\n", " "))[2:]
+        argv = [re.sub(r"\$\w+", "/x", a) for a in argv]
+        args = parser().parse_args(argv)
+        self.assertEqual(args.arms.split(","), ["base-truncated", "fork-rlm"])
+        self.assertTrue(set(args.arms.split(",")) <= set(ARMS))
+        self.assertTrue(hasattr(args, "base_context_chars"))
+        self.assertIn("--base-context-chars", doc)
 
     def test_cli_prints_summary_and_documented_default_scale(self) -> None:
         def run(*args: str) -> dict:
