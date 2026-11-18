@@ -110,8 +110,11 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
                 files.append(p)
             else:
                 raise FileNotFoundError(raw)
-    # Preserve first-seen order while counting overlapping input paths once.
-    files = list(dict.fromkeys(files))
+    # Preserve first-seen order while counting each real file once.
+    seen: dict[Path, Path] = {}
+    for f in files:
+        seen.setdefault(f.resolve(), f)
+    files = list(seen.values())
     common = os.path.commonpath([str(f.parent) for f in files]) if files else ""
     corpus, total, skipped = {}, 0, 0
     for f in files:
@@ -120,10 +123,12 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
             skipped += 1
             continue
         text = data.decode("utf-8", "replace")
-        total += len(text)
+        source = os.path.relpath(f, common) if common else str(f)
+        # Match the retained mapping: later text replaces the same source key.
+        total += len(text) - len(corpus.get(source, ""))
         if total > max_chars:
             raise ValueError(f"corpus exceeds RLM_MAX_CORPUS_CHARS={max_chars}")
-        corpus[os.path.relpath(f, common) if common else str(f)] = text
+        corpus[source] = text
     return corpus, skipped
 
 
@@ -138,6 +143,7 @@ class Session:
         self.log_path = log_dir / f"{digest}.jsonl"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.proc: subprocess.Popen | None = None
+        self._read_buffer = b""
         self.context = None
         self.stats = {"subcalls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "subcall_prompt_chars": 0, "cells": 0, "restarts": 0}
@@ -148,43 +154,87 @@ class Session:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
     def _spawn(self) -> None:
+        self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
-        if self.context is not None:
-            self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        try:
+            if self.context is not None:
+                self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        except BaseException:
+            # A failed handshake must not leave a child for the next cell to reuse.
+            self.kill()
+            raise
 
     def kill(self) -> None:
-        if self.proc and self.proc.poll() is None:
-            self.proc.kill()
-            self.proc.wait()
-        self.proc = None
+        try:
+            if self.proc and self.proc.poll() is None:
+                self.proc.kill()
+                self.proc.wait()
+        finally:
+            self.proc = None
+            self._read_buffer = b""
 
     def _read(self, deadline: float) -> dict:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
                 raise TimeoutError
+            if b"\n" in self._read_buffer:
+                line, self._read_buffer = self._read_buffer.split(b"\n", 1)
+                return json.loads(line)
             ready, _, _ = select.select([self.proc.stdout], [], [], min(left, 1.0))
             if ready:
-                line = self.proc.stdout.readline()
-                if not line:
+                # Only this reader consumes stdout; do not enter TextIOWrapper
+                # readline(), which can wait past the deadline for a newline.
+                chunk = os.read(self.proc.stdout.fileno(), 65536)
+                if not chunk:
                     raise RuntimeError("sandbox kernel exited")
-                return json.loads(line)
+                self._read_buffer += chunk
 
-    def _send(self, msg: dict) -> None:
-        self.proc.stdin.write(json.dumps(msg) + "\n")
-        self.proc.stdin.flush()
+    def _send(self, msg: dict, deadline: float) -> None:
+        payload = memoryview((json.dumps(msg) + "\n").encode("utf-8"))
+        fd = self.proc.stdin.fileno()
+        # This is the sole stdin writer. Avoid TextIOWrapper buffering/flush,
+        # which can block indefinitely when a live child stops reading.
+        os.set_blocking(fd, False)
+        while payload:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError
+            _, ready, _ = select.select([], [fd], [], min(left, 1.0))
+            if not ready:
+                continue
+            try:
+                sent = os.write(fd, payload[:65536])
+            except BlockingIOError:
+                continue
+            if sent <= 0:
+                raise RuntimeError("sandbox kernel write made no progress")
+            payload = payload[sent:]
 
     def _request(self, msg: dict, deadline: float) -> dict:
-        self._send(msg)
+        self._send(msg, deadline)
         while True:
             reply = self._read(deadline)
             if reply["type"] == "done":
+                # Validate before leaving the guarded exchange: formatting an
+                # invalid completion later must not leave a live child attached.
+                for field in ("stdout", "error", "final"):
+                    value = reply.get(field)
+                    if value is not None and not isinstance(value, str):
+                        raise RuntimeError(f"invalid sandbox done field: {field}")
                 return reply
-            self._send(self._serve_llm(reply))
+            if reply["type"] != "llm":
+                raise RuntimeError("invalid sandbox frame type")
+            self._send(self._serve_llm(reply), deadline)
 
     def _serve_llm(self, req: dict) -> dict:
-        prompts = req["prompts"]
+        if "id" not in req:
+            raise RuntimeError("sandbox llm request missing id")
+        prompts = req.get("prompts")
+        if not isinstance(prompts, list) or not all(isinstance(p, str) for p in prompts):
+            return {"type": "llm_result", "id": req["id"], "error":
+                    "prompts must be a list of strings"}
         lim = self.lim
         if self.stats["subcalls"] + len(prompts) > lim["max_subcalls"]:
             self.log("budget_refused", kind="subcalls", requested=len(prompts), **self.stats)
@@ -196,8 +246,16 @@ class Session:
             return {"type": "llm_result", "id": req["id"], "error":
                     f"prompt of {big} chars exceeds RLM_MAX_PROMPT_CHARS={lim['max_prompt_chars']}; "
                     "split the slice into smaller chunks"}
+        tokens, cap = req.get("max_tokens"), lim["subcall_max_tokens"]
+        # Preserve the catalog API's integer-zero default without accepting
+        # falsey containers or booleans as token counts.
+        if tokens is None or (type(tokens) is int and tokens == 0):
+            tokens = cap
+        if type(tokens) is not int or tokens < 1 or type(cap) is not int or cap < 1:
+            return {"type": "llm_result", "id": req["id"], "error":
+                    "max_tokens and RLM_SUBCALL_MAX_TOKENS must be a positive integer"}
+        max_tokens = min(tokens, cap, 32_000)
         self.stats["subcalls"] += len(prompts)
-        max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]), 32_000)
 
         def one(prompt: str):
             t0 = time.monotonic()
@@ -250,17 +308,25 @@ class Session:
                 self.kill()
                 self.stats["restarts"] += 1
                 reply = {"stdout": "", "final": None, "error": f"{exc}; kernel restarted, variables lost"}
+            except BaseException:
+                # Transport/decoding failure or interruption leaves reply framing
+                # uncertain. Never let the next cell reuse that child.
+                self.kill()
+                self.stats["restarts"] += 1
+                raise
             self.stats["cells"] += 1
+            subcalls_used = self.stats["subcalls"]
+            subcalls_this_cell = subcalls_used - before["subcalls"]
         out = reply.get("stdout") or ""
         shown = out if len(out) <= lim["max_output_chars"] else (
             out[: lim["max_output_chars"]] + f"\n... [{len(out) - lim['max_output_chars']} more chars truncated;"
             " keep large values in variables and print summaries]")
         ms = int((time.monotonic() - t0) * 1000)
         self.log("cell", code=code, stdout_chars=len(out), error=reply.get("error"), ms=ms,
-                 final=reply.get("final"), subcalls=self.stats["subcalls"] - before["subcalls"])
+                 final=reply.get("final"), subcalls=subcalls_this_cell)
         result = {"stdout": shown, "error": reply.get("error"), "ms": ms,
-                  "subcalls_this_cell": self.stats["subcalls"] - before["subcalls"],
-                  "budget": {"subcalls_used": self.stats["subcalls"], "subcalls_max": lim["max_subcalls"]}}
+                  "subcalls_this_cell": subcalls_this_cell,
+                  "budget": {"subcalls_used": subcalls_used, "subcalls_max": lim["max_subcalls"]}}
         if reply.get("final") is not None:
             result["final"] = reply["final"]
         return result
@@ -332,9 +398,15 @@ def _exec_handler(args: dict, **kw) -> str:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-def _rlm_command(raw_args: str = "", **_kw) -> str:
-    rows = [f"{k}: {v.stats} log={v.log_path}" for k, v in _sessions.items()]
-    return "RLM limits: " + json.dumps(limits()) + ("\n" + "\n".join(rows) if rows else "\nno RLM sessions yet")
+def _rlm_command(raw_args: str = "", session_id: str = "", **_kw) -> str:
+    header = "RLM limits: " + json.dumps(limits())
+    if not isinstance(session_id, str) or not session_id:
+        return header + "\nHost session_id required to show RLM session diagnostics"
+    profile = str(_data_dir())
+    with _sessions_lock:
+        rows = [f"{k}: {v.stats} log={v.log_path}" for k, v in _sessions.items()
+                if k[0] == profile and k[2] == session_id]
+    return header + ("\n" + "\n".join(rows) if rows else "\nno RLM sessions yet")
 
 
 def _data_dir() -> Path:

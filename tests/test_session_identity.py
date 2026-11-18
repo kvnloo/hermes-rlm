@@ -45,6 +45,19 @@ class SessionIdentityTests(unittest.TestCase):
         self.assertNotIn('second', first.log_path.read_text())
         self.assertNotIn('first', second.log_path.read_text())
 
+    def test_legacy_name_logs_are_left_untouched(self):
+        # README: existing legacy logs are not merged or migrated.
+        logs = self.root / 'logs'
+        logs.mkdir()
+        legacy = logs / 'task.jsonl'
+        legacy.write_bytes(b'{"legacy": true}\n')
+        session = rlm.session_for('task', 'session')
+        session.log('synthetic', marker='new')
+        self.assertEqual(legacy.read_bytes(), b'{"legacy": true}\n')
+        self.assertNotIn('legacy', session.log_path.read_text())
+        self.assertEqual(sorted(p.name for p in logs.iterdir()),
+                         sorted(['task.jsonl', session.log_path.name]))
+
 
 if __name__ == '__main__':
     unittest.main()

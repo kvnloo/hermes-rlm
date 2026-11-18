@@ -154,6 +154,10 @@ class CatalogTests(unittest.TestCase):
             for flag in ("--unshare-all", "--die-with-parent", "--clearenv"):
                 self.assertIn(flag, argv)
             self.assertNotIn("--share-net", argv)
+            # README discloses a read-only /usr and a private /tmp.
+            self.assertEqual(argv[argv.index("--ro-bind") + 1:][:2], ["/usr", "/usr"])
+            self.assertEqual(argv[argv.index("--tmpfs") + 1], "/tmp")
+            self.assertNotIn("--bind", argv)
         with mock.patch.object(rlm.shutil, "which", return_value=None):
             with mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "0"}):
                 with self.assertRaisesRegex(RuntimeError, "bubblewrap"):
