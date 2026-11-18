@@ -148,6 +148,12 @@ class CatalogTests(unittest.TestCase):
                                  if k == spec.name or k.startswith(spec.name + ".")])
         spec.loader.exec_module(module)
         rlm = importlib.import_module(spec.name + ".rlm")
+        with mock.patch.object(rlm.shutil, "which", return_value="/usr/bin/bwrap"), \
+                mock.patch.object(rlm.Path, "exists", return_value=True):
+            argv = rlm.sandbox_argv()
+            for flag in ("--unshare-all", "--die-with-parent", "--clearenv"):
+                self.assertIn(flag, argv)
+            self.assertNotIn("--share-net", argv)
         with mock.patch.object(rlm.shutil, "which", return_value=None):
             with mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "0"}):
                 with self.assertRaisesRegex(RuntimeError, "bubblewrap"):
