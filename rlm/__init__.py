@@ -162,10 +162,22 @@ class Session:
                 self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
         except BaseException:
             # A failed handshake must not leave a child for the next cell to reuse.
-            self.kill()
+            self._teardown()
             raise
 
     def kill(self) -> None:
+        """Stop the kernel from any thread. An exchange in flight owns the pipes, so
+        it only gets the child killed and tears itself down on the resulting EOF."""
+        proc = self.proc
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+        if self.lock.acquire(blocking=False):
+            try:
+                self._teardown()
+            finally:
+                self.lock.release()
+
+    def _teardown(self) -> None:
         try:
             if self.proc and self.proc.poll() is None:
                 self.proc.kill()
@@ -285,7 +297,7 @@ class Session:
     def load(self, paths, task_id: str = "default") -> dict:
         corpus, skipped = load_corpus(paths, self.lim["max_corpus_chars"], task_id)
         with self.lock:
-            self.kill()
+            self._teardown()
             self.context = next(iter(corpus.values())) if len(corpus) == 1 else corpus
             self._spawn()
         chars = sum(len(t) for t in corpus.values())
@@ -305,19 +317,19 @@ class Session:
             try:
                 reply = self._request({"type": "exec", "code": code}, t0 + lim["cell_timeout_s"])
             except TimeoutError:
-                self.kill()
+                self._teardown()
                 self.stats["restarts"] += 1
                 reply = {"stdout": "", "final": None, "error":
                          f"cell exceeded {lim['cell_timeout_s']}s and was killed; kernel restarted "
                          "with `context` reloaded, other variables are gone"}
             except RuntimeError as exc:
-                self.kill()
+                self._teardown()
                 self.stats["restarts"] += 1
                 reply = {"stdout": "", "final": None, "error": f"{exc}; kernel restarted, variables lost"}
             except BaseException:
                 # Transport/decoding failure or interruption leaves reply framing
                 # uncertain. Never let the next cell reuse that child.
-                self.kill()
+                self._teardown()
                 self.stats["restarts"] += 1
                 raise
             self.stats["cells"] += 1
