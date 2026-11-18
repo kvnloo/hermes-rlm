@@ -110,8 +110,11 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
                 files.append(p)
             else:
                 raise FileNotFoundError(raw)
-    # Preserve first-seen order while counting overlapping input paths once.
-    files = list(dict.fromkeys(files))
+    # Preserve first-seen order while counting each real file once.
+    seen: dict[Path, Path] = {}
+    for f in files:
+        seen.setdefault(f.resolve(), f)
+    files = list(seen.values())
     common = os.path.commonpath([str(f.parent) for f in files]) if files else ""
     corpus, total, skipped = {}, 0, 0
     for f in files:
