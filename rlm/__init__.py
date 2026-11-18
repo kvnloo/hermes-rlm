@@ -155,6 +155,8 @@ class Session:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
     def _spawn(self) -> None:
+        if self._closing:
+            raise RuntimeError("session closed")
         self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
