@@ -153,8 +153,13 @@ class Session:
     def _spawn(self) -> None:
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
-        if self.context is not None:
-            self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        try:
+            if self.context is not None:
+                self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        except BaseException:
+            # A failed handshake must not leave a child for the next cell to reuse.
+            self.kill()
+            raise
 
     def kill(self) -> None:
         if self.proc and self.proc.poll() is None:
