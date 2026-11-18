@@ -104,7 +104,8 @@ def test_output_truncation_final_and_trajectory(session):
     assert events[0] == "load" and events.count("cell") == 2
 
 
-def test_handlers_return_json_errors(tmp_path):
+def test_handlers_return_json_errors(tmp_path, monkeypatch):
+    monkeypatch.setenv("RLM_LOG_DIR", str(tmp_path / "runs"))  # hermetic: no Hermes host needed
     assert "FileNotFoundError" in rlm._load_handler({"paths": [str(tmp_path / "nope")]}, task_id="h")
     rlm._sessions.pop("h", None)
 
