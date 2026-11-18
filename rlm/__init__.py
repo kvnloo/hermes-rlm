@@ -194,7 +194,10 @@ class Session:
             self._send(self._serve_llm(reply))
 
     def _serve_llm(self, req: dict) -> dict:
-        prompts = req["prompts"]
+        prompts = req.get("prompts")
+        if not isinstance(prompts, list) or not all(isinstance(p, str) for p in prompts):
+            return {"type": "llm_result", "id": req["id"], "error":
+                    "prompts must be a list of strings"}
         lim = self.lim
         if self.stats["subcalls"] + len(prompts) > lim["max_subcalls"]:
             self.log("budget_refused", kind="subcalls", requested=len(prompts), **self.stats)
