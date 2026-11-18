@@ -16,6 +16,7 @@ import atexit
 import contextvars
 import glob as _glob
 import json
+import logging
 import os
 import select
 import shutil
@@ -279,7 +280,10 @@ def _shutdown() -> None:
         sessions = list(_sessions.values())
         _sessions.clear()
     for session in sessions:
-        session.kill()
+        try:
+            session.kill()
+        except Exception:
+            logging.getLogger(__name__).exception("RLM session cleanup failed; continuing remaining cleanup")
 
 
 LOAD_SCHEMA = {

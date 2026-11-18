@@ -39,6 +39,9 @@ class HostUnloadTests(unittest.TestCase):
                     assert implementation._sessions_lock.acquire(blocking=False)
                     implementation._sessions_lock.release()
                     killed.append('kill')
+                def fail_kill():
+                    raise OSError('synthetic kill failure')
+                implementation._sessions['failing'] = SimpleNamespace(kill=fail_kill)
                 implementation._sessions['synthetic'] = SimpleNamespace(kill=kill)
                 try:
                     assert manager.unload('rlm')
