@@ -27,6 +27,21 @@ class ExecCleanupTests(unittest.TestCase):
                     self.assertIsNone(session.proc)
                     self.assertEqual(session.stats['restarts'], 1)
 
+    def test_malformed_reply_shape_discards_child(self):
+        with tempfile.TemporaryDirectory() as root:
+            for reply, error in (([], TypeError), ('x', TypeError), ({}, KeyError)):
+                with self.subTest(reply=reply):
+                    session = rlm.Session('test', log_dir=Path(root))
+                    proc = session.proc = mock.Mock()
+                    proc.poll.return_value = None
+                    with mock.patch.object(session, '_send'), \
+                            mock.patch.object(session, '_read', return_value=reply):
+                        with self.assertRaises(error):
+                            session.exec('1 + 1')
+                    proc.kill.assert_called_once_with()
+                    self.assertIsNone(session.proc)
+                    self.assertEqual(session.stats['restarts'], 1)
+
     def test_kernel_reported_cell_error_does_not_discard_healthy_child(self):
         with tempfile.TemporaryDirectory() as root:
             session = rlm.Session('test', log_dir=Path(root))
