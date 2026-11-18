@@ -258,6 +258,12 @@ class Session:
                 self.kill()
                 self.stats["restarts"] += 1
                 reply = {"stdout": "", "final": None, "error": f"{exc}; kernel restarted, variables lost"}
+            except BaseException:
+                # Transport/decoding failure or interruption leaves reply framing
+                # uncertain. Never let the next cell reuse that child.
+                self.kill()
+                self.stats["restarts"] += 1
+                raise
             self.stats["cells"] += 1
         out = reply.get("stdout") or ""
         shown = out if len(out) <= lim["max_output_chars"] else (
