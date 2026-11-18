@@ -32,6 +32,17 @@ class StatusProfileTests(unittest.TestCase):
                 self.assertIn('no RLM sessions yet', output)
                 self.assertNotIn('/private/', output)
 
+    def test_status_lists_every_session_of_current_profile(self):
+        with patch.object(rlm, '_sessions', self.sessions):
+            for profile, logs in [('alice', ['/private/alice/log', '/private/alice/other']),
+                                  ('bob', ['/private/bob/log'])]:
+                with self.subTest(profile=profile), patch.object(
+                        rlm, '_data_dir', return_value=Path('/profiles') / profile):
+                    rows = rlm._rlm_command().splitlines()[1:]
+                    self.assertEqual(len(rows), len(logs))
+                    for log in logs:
+                        self.assertEqual(sum(r.endswith('log=' + log) for r in rows), 1)
+
     def test_registry_enumeration_holds_lock(self):
         lock = threading.Lock()
         class GuardedDict(dict):
