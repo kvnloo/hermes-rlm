@@ -58,5 +58,31 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
         )
 
 
+    def test_validated_final_released_for_its_turn_only_under_overlap(self):
+        final = {"answer": "42", "citations": [{"source": "evidence.txt", "start": 0, "end": 2, "quote": "ev"}]}
+
+        def run_exec(_):
+            self.loaded_session.last_validated_final = final
+            return json.dumps({"final": "42"})
+
+        self.gate.execute(run_exec, "rlm_exec", {}, task_id="task-a", session_id="shared", turn_id="turn-a")
+        self.gate.begin(session_id="shared", task_id="task-b", turn_id="turn-b")
+        self.assertEqual(
+            self.gate.transform("ignored", session_id="shared", turn_id="turn-a"),
+            '42\n\nSources:\n- evidence.txt[0:2]: "ev"',
+        )
+        self.assertIsNone(self.gate.transform("plain", session_id="shared", turn_id="turn-b"))
+
+    def test_rlm_tool_with_mismatched_identity_is_refused_without_running(self):
+        calls = []
+        for ids in (("task-b", "turn-a"), ("task-a", "turn-x")):
+            result = self.gate.execute(
+                lambda _: calls.append(1), "rlm_exec", {},
+                task_id=ids[0], session_id="shared", turn_id=ids[1],
+            )
+            self.assertIn("refused", json.loads(result)["error"])
+        self.assertEqual(calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
