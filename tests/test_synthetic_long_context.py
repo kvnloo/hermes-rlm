@@ -138,7 +138,7 @@ class SyntheticLongContextTests(unittest.TestCase):
                 self.assertEqual(int(task["gold"]), expected)
 
     def test_rejects_record_sizes_that_break_bijective_joins(self) -> None:
-        for invalid in (0, 63, 65, 513, True):
+        for invalid in (0, 63, 65, 513, True, 64.0):
             with self.subTest(records=invalid), self.assertRaises(ValueError):
                 generate(self.out, invalid)
 
