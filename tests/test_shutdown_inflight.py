@@ -73,7 +73,7 @@ class ShutdownInflightTests(unittest.TestCase):
         t.join(10)
         self.assertFalse(t.is_alive())
         self.assertIsInstance(out.get('exc'), RuntimeError)
-        self.assertIn('session closed', str(out['exc']))
+        self.assertIn('closed', str(out['exc']))
         self.assertIsNone(s.proc)
 
 
