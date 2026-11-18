@@ -150,6 +150,12 @@ class SyntheticLongContextTests(unittest.TestCase):
             got = sorted(task["id"] for task in self.tasks(n).values())
             self.assertEqual(got, [f"synthetic-{f}-v1-{n}" for f in ("aggregation", "multihop", "needle")])
 
+    def test_source_id_names_family_and_scale(self) -> None:
+        # Provenance metadata must name the scale; the ids alone were pinned before.
+        for n in SIZES:
+            got = {t["family"]: t["metadata"]["source_id"] for t in self.tasks(n).values()}
+            self.assertEqual(got, {f"synthetic-{f}": f"{f}/{n}" for f in ("aggregation", "multihop", "needle")})
+
     def test_second_scale_in_same_out_dir_keeps_first_scale_contexts(self) -> None:
         generate(self.out, 64)
         first = {t["id"]: t for t in read_jsonl(self.out / "full.jsonl")}
