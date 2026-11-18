@@ -1,5 +1,5 @@
 """Pins sandbox_argv, _task_path and _data_dir; host modules and the machine are faked, never relied on.
-Deliberately omits the env escape hatch and relative-path fallback: sibling PRs #4/#3/#6 change them."""
+Deliberately omits the env escape hatch and relative-path fallback: sibling PRs change them."""
 import os
 import sys
 import types
@@ -14,11 +14,10 @@ def fake(**attrs):
 
 
 class SandboxArgvTests(unittest.TestCase):
-    def argv(self, bwrap="/usr/bin/bwrap", py_exists=True, env=None):
+    def argv(self, bwrap="/usr/bin/bwrap", py_exists=True):
         with mock.patch.dict(os.environ), mock.patch.object(rlm.shutil, "which", return_value=bwrap), \
                 mock.patch.object(Path, "exists", return_value=py_exists):
             os.environ.pop("RLM_ALLOW_UNSANDBOXED", None)
-            os.environ.update(env or {})
             return rlm.sandbox_argv()
 
     def test_bwrap_argv_is_the_isolation_boundary(self):
@@ -40,7 +39,7 @@ class SandboxArgvTests(unittest.TestCase):
 class TaskPathTests(unittest.TestCase):
     def test_absolute_passes_through_and_tilde_expands(self):
         with mock.patch.dict(os.environ, {"HOME": "/home/x"}):
-            self.assertEqual(rlm._task_path("/a/b", "t"), "/a/b")
+            self.assertEqual(rlm._task_path("/a//b", "t"), "/a//b")
             self.assertEqual(rlm._task_path("~/c", "t"), "/home/x/c")
 
 
