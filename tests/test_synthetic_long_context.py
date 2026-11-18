@@ -8,11 +8,15 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import re
+import sys
 import tempfile
 import unittest
 
 from bench.paper_tasks import read_jsonl, score_task
 from bench.synthetic_long_context import generate
+
+
+SIZES = (64, 128, 256, 512)  # pinned: the documented --records scales
 
 
 class SyntheticLongContextTests(unittest.TestCase):
@@ -22,6 +26,7 @@ class SyntheticLongContextTests(unittest.TestCase):
         self.out = Path(temp.name) / "generated"
 
     def tasks(self, records: int = 64) -> dict[str, dict]:
+        self.out = self.out.parent / f"generated-{records}"
         summary = generate(self.out, records)
         self.assertEqual(summary["full"], 3)
         self.assertEqual(summary["smoke"], 3)
@@ -54,6 +59,17 @@ class SyntheticLongContextTests(unittest.TestCase):
                 self.assertEqual(score_task(task, "ANSWER: incorrect"), 0.0)
                 self.assertEqual(score_task(task, ""), 0.0)
 
+    def test_matrix_runner_loads_generated_manifest(self) -> None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench"))
+        self.addCleanup(sys.path.pop, 0)
+        from paper_matrix import load_tasks  # script-style sibling imports
+
+        self.tasks(128)
+        loaded = load_tasks(self.out / "full.jsonl")
+        self.assertEqual(len(loaded), 3)
+        sniah = {"sniah", "niah"}  # the filter --smallest-sniah applies
+        self.assertFalse([t for t in loaded if re.sub(r"[^a-z]", "", t["family"].lower()) in sniah])
+
     def test_same_manifest_and_context_bytes_on_repeat_generation(self) -> None:
         self.tasks()
         before = {
@@ -68,43 +84,52 @@ class SyntheticLongContextTests(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_needle_gold_is_the_only_matching_ticket(self) -> None:
-        task = self.tasks()["synthetic-needle"]
-        ticket = re.search(r"ticket (T-\d{4})", task["question"]).group(1)
-        lines = Path(task["context_path"]).read_text().splitlines()
-        matches = [
-            re.search(r"\btoken=(N-[A-F0-9]{12})\b", line).group(1)
-            for line in lines if f"ticket={ticket} |" in line
-        ]
-        self.assertEqual(matches, [task["gold"]])
-        self.assertEqual(sum("ticket=T-" in line for line in lines), 64 * 3)
+        for n in SIZES:
+            with self.subTest(records=n):
+                task = self.tasks(n)["synthetic-needle"]
+                ticket = re.search(r"ticket (T-\d{4})", task["question"]).group(1)
+                lines = Path(task["context_path"]).read_text().splitlines()
+                matches = [
+                    re.search(r"\btoken=(N-[A-F0-9]{12})\b", line).group(1)
+                    for line in lines if f"ticket={ticket} |" in line
+                ]
+                self.assertEqual(matches, [task["gold"]])
+                self.assertEqual(sum("ticket=T-" in line for line in lines), n * 3)
 
     def test_multihop_gold_requires_three_distinct_joins(self) -> None:
-        task = self.tasks()["synthetic-multihop"]
-        context = Path(task["context_path"]).read_text()
-        agents = dict(re.findall(r"^ALIAS \| agent=(AG-\d{4}) \| project=(PR-\d{4})", context, re.M))
-        projects = dict(re.findall(r"^PROJECT \| project=(PR-\d{4}) \| locker=(LK-\d{4})", context, re.M))
-        lockers = dict(re.findall(r"^LOCKER \| locker=(LK-\d{4}) \| seal=(S-[A-F0-9]{12})", context, re.M))
-        self.assertEqual((len(agents), len(projects), len(lockers)), (64, 64, 64))
-        target = re.search(r"agent (AG-\d{4})", task["question"]).group(1)
-        self.assertEqual(lockers[projects[agents[target]]], task["gold"])
+        for n in SIZES:
+            with self.subTest(records=n):
+                task = self.tasks(n)["synthetic-multihop"]
+                context = Path(task["context_path"]).read_text()
+                agents = dict(re.findall(r"^ALIAS \| agent=(AG-\d{4}) \| project=(PR-\d{4})", context, re.M))
+                projects = dict(re.findall(r"^PROJECT \| project=(PR-\d{4}) \| locker=(LK-\d{4})", context, re.M))
+                lockers = dict(re.findall(r"^LOCKER \| locker=(LK-\d{4}) \| seal=(S-[A-F0-9]{12})", context, re.M))
+                self.assertEqual((len(agents), len(projects), len(lockers)), (n, n, n))
+                self.assertEqual(len(set(agents.values())), n)
+                self.assertEqual(len(set(projects.values())), n)
+                self.assertEqual(len(set(lockers.values())), n)
+                target = re.search(r"agent (AG-\d{4})", task["question"]).group(1)
+                self.assertEqual(lockers[projects[agents[target]]], task["gold"])
 
     def test_aggregation_gold_matches_an_independent_row_parser(self) -> None:
-        task = self.tasks()["synthetic-aggregation"]
-        context = Path(task["context_path"]).read_text()
-        rows = re.findall(
-            r"^TX \| txn=(TX-\d{5}) \| region=(\w+) \| "
-            r"status=(\w+) \| units=(\d{3}) \| audit=synthetic$",
-            context,
-            re.M,
-        )
-        self.assertEqual(len(rows), 64 * 4)
-        self.assertEqual(len({row[0] for row in rows}), len(rows))
-        expected = sum(
-            int(units) for _, region, status, units in rows
-            if region == "west" and status == "cleared"
-        )
-        self.assertGreater(expected, 0)
-        self.assertEqual(int(task["gold"]), expected)
+        for n in SIZES:
+            with self.subTest(records=n):
+                task = self.tasks(n)["synthetic-aggregation"]
+                context = Path(task["context_path"]).read_text()
+                rows = re.findall(
+                    r"^TX \| txn=(TX-\d{5}) \| region=(\w+) \| "
+                    r"status=(\w+) \| units=(\d{3}) \| audit=synthetic$",
+                    context,
+                    re.M,
+                )
+                self.assertEqual(len(rows), n * 4)
+                self.assertEqual(len({row[0] for row in rows}), len(rows))
+                expected = sum(
+                    int(units) for _, region, status, units in rows
+                    if region == "west" and status == "cleared"
+                )
+                self.assertGreater(expected, 0)
+                self.assertEqual(int(task["gold"]), expected)
 
     def test_rejects_record_sizes_that_break_bijective_joins(self) -> None:
         for invalid in (0, 63, 65, 513, True):
