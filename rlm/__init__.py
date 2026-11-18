@@ -207,7 +207,8 @@ class Session:
                     f"prompt of {big} chars exceeds RLM_MAX_PROMPT_CHARS={lim['max_prompt_chars']}; "
                     "split the slice into smaller chunks"}
         self.stats["subcalls"] += len(prompts)
-        max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]), 32_000)
+        max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]),
+                         lim["subcall_max_tokens"], 32_000)
 
         def one(prompt: str):
             t0 = time.monotonic()
