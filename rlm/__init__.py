@@ -5,7 +5,7 @@ The root model (the normal Hermes agent) inspects it with ``rlm_exec`` code cell
 to a sub-model with ``llm_query``/``llm_batch``. Sub-calls go through the plugin LLM lane ``ctx.llm``
 (auxiliary task ``rlm_subcall``), so provider, credentials and usage accounting stay Hermes'; the kernel never
 sees a key. Budgets (sub-calls, prompt size, cell time) are enforced here, host-side. Every load,
-cell and sub-call is appended to ``<hermes home>/plugin-data/rlm/runs/<session>.jsonl``.
+cell and sub-call is appended to ``<hermes home>/plugin-data/rlm/runs/<identity-sha256>.jsonl``.
 
 reuse-checked: execute_code / delegate_task -- host-privileged and unbudgeted; RLM needs a sandboxed
 corpus REPL whose sub-calls reuse ctx.llm(task=rlm_subcall). Wired via plugins.enabled (config.yaml).
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import atexit
 import contextvars
+import hashlib
 import glob as _glob
 import json
 import logging
@@ -131,7 +132,8 @@ class Session:
         self.key, self.subcall, self.lim = key, subcall, limits()
         if log_dir is None:
             log_dir = Path(os.environ.get("RLM_LOG_DIR") or _data_dir() / "runs")
-        self.log_path = log_dir / f"{key or 'default'}.jsonl"
+        digest = hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()
+        self.log_path = log_dir / f"{digest}.jsonl"
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.proc: subprocess.Popen | None = None
         self.context = None
@@ -262,15 +264,15 @@ class Session:
         return result
 
 
-_sessions: dict[str, Session] = {}
+_sessions: dict[tuple[str, str, str], Session] = {}
 _sessions_lock = threading.Lock()
 
 
 def session_for(task_id: str = "", session_id: str = "", **_kw) -> Session:
-    key = "".join(c for c in (task_id or session_id or "default") if c.isalnum() or c in "-_")[:80]
+    key = (str(_data_dir()), str(task_id), str(session_id))
     with _sessions_lock:
         if key not in _sessions:
-            _sessions[key] = Session(key)
+            _sessions[key] = Session(json.dumps(key))
         return _sessions[key]
 
 
