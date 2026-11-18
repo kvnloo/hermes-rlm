@@ -26,6 +26,7 @@ class RecordingContext:
         self.tools: list[str] = []
         self.auxiliary_tasks: list[str] = []
         self.commands: list[str] = []
+        self.unload_callbacks = []
 
     def register_tool(self, name: str, *args, **kwargs) -> None:
         self.tools.append(name)
@@ -35,6 +36,9 @@ class RecordingContext:
 
     def register_command(self, name: str, *args, **kwargs) -> None:
         self.commands.append(name)
+
+    def on_unload(self, callback) -> None:
+        self.unload_callbacks.append(callback)
 
 
 def manifest_list(text: str, key: str) -> list[str]:
@@ -103,6 +107,7 @@ class CatalogTests(unittest.TestCase):
 
         ctx = RecordingContext()
         module.register(ctx)
+        self.assertEqual(len(ctx.unload_callbacks), 1)
 
         section = disclosure()
         observed = {

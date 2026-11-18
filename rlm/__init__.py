@@ -275,8 +275,11 @@ def session_for(task_id: str = "", session_id: str = "", **_kw) -> Session:
 
 @atexit.register
 def _shutdown() -> None:
-    for s in _sessions.values():
-        s.kill()
+    with _sessions_lock:
+        sessions = list(_sessions.values())
+        _sessions.clear()
+    for session in sessions:
+        session.kill()
 
 
 LOAD_SCHEMA = {
@@ -343,3 +346,4 @@ def register(ctx) -> None:
     ctx.register_auxiliary_task("rlm_subcall", display_name="RLM sub-call",
                                 description="Sub-model behind llm_query/llm_batch in the rlm plugin")
     ctx.register_command("rlm", _rlm_command, description="Show RLM budgets, usage and trajectory logs")
+    ctx.on_unload(_shutdown)
