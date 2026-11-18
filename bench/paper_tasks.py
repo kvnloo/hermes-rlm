@@ -121,12 +121,13 @@ def score_task(task: dict, answer: str) -> float:
         if answer_type.endswith("DATE"):
             # The upstream helper uses dateutil. Pin default to prevent today's
             # date from affecting incomplete dates, and reject incomplete dates.
+            # A missing dateutil must raise, not silently score every date 0.
             try:
                 from dateutil.parser import parse
                 first = parse(prediction, default=datetime(2000, 1, 1))
                 second = parse(prediction, default=datetime(2001, 2, 2))
                 return float(first == second == datetime.fromisoformat(gold))
-            except (ImportError, ValueError, OverflowError):
+            except (ValueError, OverflowError):
                 return 0.0
         return 0.0
     text = answer_text(answer)
