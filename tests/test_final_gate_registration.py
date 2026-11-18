@@ -46,6 +46,24 @@ class RegisteredHookTests(unittest.TestCase):
             self.assertEqual(rlm._sessions, {})
             self.assertIsNone(hooks["transform_llm_output"]("x", session_id="shared", turn_id="turn-a"))
 
+    def test_session_reset_hook_forgets_loaded_gate(self):
+        ctx = Ctx()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(rlm, "_data_dir", lambda: Path(tmp)), \
+                mock.patch.object(rlm, "_CTX", None), \
+                mock.patch.dict(rlm._sessions, clear=True):
+            rlm.register(ctx)
+            rlm._sessions[(tmp, "task-a", "shared")] = SimpleNamespace(
+                context="evidence", last_validated_final=None, kill=lambda: None)
+            hooks = ctx.hooks
+            hooks["pre_llm_call"](session_id="shared", task_id="task-a", turn_id="turn-a")
+            self.assertEqual(hooks["transform_llm_output"]("x", session_id="shared", turn_id="turn-a"), WITHHELD)
+            hooks["on_session_end"](session_id="shared", turn_id="turn-a")
+            hooks["on_session_reset"](session_id="shared")
+            self.assertIsNone(hooks["transform_llm_output"]("x", session_id="shared", turn_id="stray"))
+            hooks["pre_llm_call"](session_id="shared", task_id="task-a", turn_id="turn-a2")
+            self.assertIsNone(hooks["transform_llm_output"]("x", session_id="shared", turn_id="turn-a2"))
+
 
 if __name__ == "__main__":
     unittest.main()
