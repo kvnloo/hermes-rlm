@@ -112,6 +112,21 @@ class RlmUnitTests(unittest.TestCase):
             self.assertEqual(session.stats["subcalls"], 1)
             self.assertIn('"event": "subcall"', (Path(temp) / "ci.jsonl").read_text())
 
+    def test_batch_larger_than_remaining_budget_is_refused_whole(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            calls: list[str] = []
+
+            def subcall(prompt: str, max_tokens: int):
+                calls.append(prompt)
+                return prompt, {"prompt_tokens": 1, "completion_tokens": 1}
+
+            session = rlm.Session("ci-batch", subcall=subcall, log_dir=Path(temp))
+            session.lim["max_subcalls"] = 2
+            reply = session._serve_llm({"id": 1, "prompts": ["a", "b", "c"], "max_tokens": 20})
+            self.assertIn("budget exhausted", reply["error"])
+            self.assertEqual(calls, [])
+            self.assertEqual(session.stats["subcalls"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
