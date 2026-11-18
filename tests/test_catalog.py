@@ -107,7 +107,7 @@ class CatalogTests(unittest.TestCase):
 
         ctx = RecordingContext()
         module.register(ctx)
-        self.assertEqual(len(ctx.unload_callbacks), 1)
+        self.assertEqual([cb.__name__ for cb in ctx.unload_callbacks], ["_shutdown"])
 
         section = disclosure()
         observed = {
