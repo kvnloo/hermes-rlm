@@ -147,7 +147,7 @@ class CatalogTests(unittest.TestCase):
         self.addCleanup(lambda: [sys.modules.pop(k) for k in tuple(sys.modules)
                                  if k == spec.name or k.startswith(spec.name + ".")])
         spec.loader.exec_module(module)
-        rlm = sys.modules[spec.name + ".rlm"]
+        rlm = importlib.import_module(spec.name + ".rlm")
         with mock.patch.object(rlm.shutil, "which", return_value=None):
             with mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "0"}):
                 with self.assertRaisesRegex(RuntimeError, "bubblewrap"):
