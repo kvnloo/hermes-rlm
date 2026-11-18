@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 from bench.paper_tasks import read_jsonl, score_task
-from bench.synthetic_long_context import DEFAULT_RECORDS, generate, main
+from bench.synthetic_long_context import DEFAULT_RECORDS, SIZE_BASIS, generate, main
 
 
 SIZES = (64, 128, 256, 512)  # pinned: the documented --records scales
@@ -54,6 +54,8 @@ class SyntheticLongContextTests(unittest.TestCase):
                     task["metadata"]["context_sha256"],
                     hashlib.sha256(context.encode("utf-8")).hexdigest(),
                 )
+                self.assertEqual(task["metadata"]["size_basis"], SIZE_BASIS)
+                self.assertIn("NOT a tokenizer", task["metadata"]["size_basis"])
                 self.assertNotIn("ANSWER:", context)
                 self.assertNotIn(task["question"], context)
                 self.assertNotIn(str(task["gold"]), task["question"])
