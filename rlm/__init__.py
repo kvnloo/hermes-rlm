@@ -397,7 +397,10 @@ def _exec_handler(args: dict, **kw) -> str:
 
 
 def _rlm_command(raw_args: str = "", **_kw) -> str:
-    rows = [f"{k}: {v.stats} log={v.log_path}" for k, v in _sessions.items()]
+    profile = str(_data_dir())
+    with _sessions_lock:
+        rows = [f"{k}: {v.stats} log={v.log_path}" for k, v in _sessions.items()
+                if k[0] == profile]
     return "RLM limits: " + json.dumps(limits()) + ("\n" + "\n".join(rows) if rows else "\nno RLM sessions yet")
 
 

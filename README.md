@@ -12,7 +12,7 @@ The repository root is the Hermes plugin directory (`plugin.yaml` and `__init__.
 
 - **Tools**: `rlm_load`, `rlm_exec`.
 - **Auxiliary tasks**: `rlm_subcall`.
-- **Commands**: `rlm` (the Hermes status command).
+- **Commands**: `rlm` (status for the current Hermes profile, including all sessions in that profile; it is not a per-session access-control boundary).
 - **Hooks**: none.
 - **Middleware**: none.
 - **Reads**: `rlm_load` opens host files, directories, and glob matches requested by the model, relative to the calling session workspace via `ctx.session_cwd()` for relative paths; missing, failing, or non-absolute workspace resolution is refused rather than falling back to the gateway process directory. Explicit absolute paths remain supported; it loads text on the host before handing it to the sandbox. The plugin also reads optional `RLM_*` environment settings for budgets and runtime behavior.
