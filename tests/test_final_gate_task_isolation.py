@@ -116,6 +116,32 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
         self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-a")
         self.assertEqual(self.gate.transform("x", session_id="shared", turn_id="turn-a"), "42")
 
+    def test_new_turn_of_same_task_does_not_reuse_previous_validated_final(self):
+        final = {"answer": "42", "citations": []}
+
+        def run_exec(_):
+            self.loaded_session.last_validated_final = final
+            return json.dumps({"final": "42"})
+
+        self.gate.execute(run_exec, "rlm_exec", {}, task_id="task-a", session_id="shared", turn_id="turn-a")
+        self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-next")
+        self.assertIsNone(self.loaded_session.last_validated_final)
+        self.gate.execute(lambda _: json.dumps({"final": "42"}), "rlm_exec", {},
+                          task_id="task-a", session_id="shared", turn_id="turn-next")
+        self.assertEqual(self.gate.transform("x", session_id="shared", turn_id="turn-next"), WITHHELD)
+
+    def test_later_tool_call_without_final_revokes_earlier_validated_final(self):
+        final = {"answer": "42", "citations": []}
+
+        def run_exec(_):
+            self.loaded_session.last_validated_final = final
+            return json.dumps({"final": "42"})
+
+        ids = dict(task_id="task-a", session_id="shared", turn_id="turn-a")
+        self.gate.execute(run_exec, "rlm_exec", {}, **ids)
+        self.gate.execute(lambda _: json.dumps({"out": "x"}), "rlm_exec", {}, **ids)
+        self.assertEqual(self.gate.transform("x", session_id="shared", turn_id="turn-a"), WITHHELD)
+
     def test_rlm_tool_with_mismatched_identity_is_refused_without_running(self):
         calls = []
         for ids in (("task-b", "turn-a"), ("task-a", "turn-x")):
