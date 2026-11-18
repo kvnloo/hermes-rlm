@@ -38,6 +38,25 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
             self.gate.transform("ordinary reply", session_id="shared", turn_id="turn-b")
         )
 
+    def test_load_survives_an_interleaved_other_task(self):
+        self.gate.get_session = lambda task_id, session_id: None  # host session already gone
+        self.gate.end(session_id="shared", turn_id="turn-a")
+        self.gate.begin(session_id="shared", task_id="task-b", turn_id="turn-b")
+        self.gate.end(session_id="shared", turn_id="turn-b")
+        self.gate.begin(session_id="shared", task_id="task-a", turn_id="turn-a2")
+        self.assertEqual(
+            self.gate.transform("uncited", session_id="shared", turn_id="turn-a2"), WITHHELD)
+
+    def test_live_session_context_without_gate_load_is_remembered(self):
+        gate = FinalGate(lambda task_id, session_id: SimpleNamespace(
+            context="evidence", last_validated_final=None))
+        gate.begin(session_id="shared", task_id="task-a", turn_id="turn-a")
+        self.assertEqual(gate.transform("uncited", session_id="shared", turn_id="turn-a"), WITHHELD)
+        gate.end(session_id="shared", turn_id="turn-a")
+        gate.get_session = lambda task_id, session_id: None
+        gate.begin(session_id="shared", task_id="task-a", turn_id="turn-a2")
+        self.assertEqual(gate.transform("uncited", session_id="shared", turn_id="turn-a2"), WITHHELD)
+
     def test_overlapping_previous_task_remains_fail_closed_until_its_end(self):
         self.gate.begin(session_id="shared", task_id="task-b", turn_id="turn-b")
         self.assertEqual(
@@ -59,7 +78,7 @@ class FinalGateTaskIsolationTests(unittest.TestCase):
 
 
     def test_load_continuity_is_remembered_per_task_without_live_session(self):
-        # Pins the `latest` pointer: the host session is gone, only gate state remains.
+        # Pins the `loaded` set: the host session is gone, only gate state remains.
         self.loaded_session.context = None
         self.gate.end(session_id="shared", turn_id="turn-a")
         self.assertEqual(

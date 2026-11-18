@@ -15,7 +15,8 @@ class FinalGate:
     def __init__(self, get_session):
         self.get_session = get_session
         self.turns = {}  # (session_id, turn_id) -> in-flight turn state
-        self.latest = {}  # session_id -> last state, for same-task load continuity
+        self.latest = {}  # session_id -> last state, fallback when no turn is in flight
+        self.loaded = set()  # (session_id, task_id) that loaded a corpus; survives interleaved tasks
         self.lock = threading.Lock()
 
     def begin(self, session_id='', task_id='', turn_id='', **_):
@@ -23,14 +24,12 @@ class FinalGate:
             return
         key = (session_id, turn_id)
         with self.lock:
-            previous = self.latest.get(session_id)
             existing = self.turns.get(key)
             if existing and existing['task'] == task_id:
                 return
             # Session IDs outlive task IDs; a different task never inherits a load.
             state = {'task': task_id, 'turn': turn_id,
-                     'loaded': bool(previous and previous['task'] == task_id
-                                    and previous['loaded']), 'final': None}
+                     'loaded': (session_id, task_id) in self.loaded, 'final': None}
             self.turns[key] = state
             self.latest[session_id] = state
         session = self.get_session(task_id, session_id)
@@ -40,6 +39,7 @@ class FinalGate:
     def reset(self, session_id='', **_):
         with self.lock:
             self.latest.pop(session_id, None)
+            self.loaded = {key for key in self.loaded if key[0] != session_id}
             for key in [key for key in self.turns if key[0] == session_id]:
                 self.turns.pop(key, None)
 
@@ -66,6 +66,7 @@ class FinalGate:
             if isinstance(parsed, dict) and not parsed.get('error'):
                 if tool_name == 'rlm_load' and parsed.get('loaded'):
                     state['loaded'] = True
+                    self.loaded.add((session_id, task_id))
                 if (tool_name == 'rlm_exec' and parsed.get('final') is not None
                         and session is not None and session.last_validated_final is not None):
                     state['validated'] = session.last_validated_final
@@ -82,6 +83,7 @@ class FinalGate:
             if not state['loaded'] and (session is None or session.context is None):
                 return None
             state['loaded'] = True
+            self.loaded.add((session_id, state['task']))
             if (not turn_id or state['turn'] != turn_id or state['final'] is None
                     or session is None or session.last_validated_final is not state.get('validated')):
                 return WITHHELD
