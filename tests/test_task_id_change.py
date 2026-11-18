@@ -33,6 +33,7 @@ class TaskIdChangeTests(unittest.TestCase):
         b = self.run_tool(rlm._exec_handler, {'code': 'print(x)'}, 'task-B')
         self.assertIn('NameError', b['error'] or '')
         b = self.run_tool(rlm._exec_handler, {'code': 'print(context)'}, 'task-B')
+        self.assertIsNone(b['error'], b)
         self.assertNotIn('needle', b['stdout'])
         back = self.run_tool(rlm._exec_handler, {'code': 'print(x, context)'}, 'task-A')
         self.assertIn('41 needle-in-corpus', back['stdout'])
