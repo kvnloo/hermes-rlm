@@ -154,16 +154,18 @@ class Session:
         with open(self.log_path, "a") as f:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
-    def _spawn(self) -> None:
+    def _ensure_open(self) -> None:
         if self._closing:
-            raise RuntimeError("session closed")
+            raise RuntimeError("RLM session is closed")
+
+    def _spawn(self) -> None:
+        self._ensure_open()
         self._read_buffer = b""
         self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, bufsize=1)
-        if self._closing:  # session was killed (shutdown): never spawn a child for it again
-            self._teardown()
-            raise RuntimeError("session closed")
         try:
+            # Unload can race with Popen before the child is assigned to proc.
+            self._ensure_open()
             if self.context is not None:
                 self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
         except BaseException:
@@ -303,8 +305,10 @@ class Session:
         return {"type": "llm_result", "id": req["id"], "results": [t for t, _ in out]}
 
     def load(self, paths, task_id: str = "default") -> dict:
+        self._ensure_open()
         corpus, skipped = load_corpus(paths, self.lim["max_corpus_chars"], task_id)
         with self.lock:
+            self._ensure_open()
             self._teardown()
             self.context = next(iter(corpus.values())) if len(corpus) == 1 else corpus
             self._spawn()
@@ -318,6 +322,7 @@ class Session:
     def exec(self, code: str) -> dict:
         lim = self.lim
         with self.lock:
+            self._ensure_open()
             if self.proc is None or self.proc.poll() is not None:
                 self._spawn()
             t0 = time.monotonic()
@@ -326,10 +331,11 @@ class Session:
                 reply = self._request({"type": "exec", "code": code}, t0 + lim["cell_timeout_s"])
             except TimeoutError:
                 self._teardown()
-                self.stats["restarts"] += 1
+                self.stats["restarts"] += not self._closing
+                note = ("session closed" if self._closing else
+                        "kernel restarted with `context` reloaded, other variables are gone")
                 reply = {"stdout": "", "final": None, "error":
-                         f"cell exceeded {lim['cell_timeout_s']}s and was killed; kernel restarted "
-                         "with `context` reloaded, other variables are gone"}
+                         f"cell exceeded {lim['cell_timeout_s']}s and was killed; {note}"}
             except RuntimeError as exc:
                 self._teardown()
                 note = "session closed" if self._closing else "kernel restarted, variables lost"
