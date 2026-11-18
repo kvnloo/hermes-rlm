@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 from bench.paper_tasks import read_jsonl, score_task
-from bench.synthetic_long_context import DEFAULT_RECORDS, SIZE_BASIS, generate, main
+from bench.synthetic_long_context import DEFAULT_RECORDS, RECORD_SIZES, SIZE_BASIS, generate, main
 
 
 SIZES = (64, 128, 256, 512)  # pinned: the documented --records scales
@@ -138,7 +138,8 @@ class SyntheticLongContextTests(unittest.TestCase):
                 self.assertEqual(int(task["gold"]), expected)
 
     def test_rejects_record_sizes_that_break_bijective_joins(self) -> None:
-        for invalid in (0, 63, 65, 513, True, 64.0):
+        self.assertEqual(RECORD_SIZES, SIZES)  # the accepted set is exactly the documented scales
+        for invalid in (0, 63, 65, 513, 1024, True, 64.0):
             with self.subTest(records=invalid), self.assertRaises(ValueError):
                 generate(self.out, invalid)
 
