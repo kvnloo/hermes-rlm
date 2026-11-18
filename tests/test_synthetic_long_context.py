@@ -5,7 +5,10 @@ Run from the repository root:
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
+import json
 from pathlib import Path
 import re
 import sys
@@ -13,7 +16,7 @@ import tempfile
 import unittest
 
 from bench.paper_tasks import read_jsonl, score_task
-from bench.synthetic_long_context import generate
+from bench.synthetic_long_context import DEFAULT_RECORDS, generate, main
 
 
 SIZES = (64, 128, 256, 512)  # pinned: the documented --records scales
@@ -135,6 +138,24 @@ class SyntheticLongContextTests(unittest.TestCase):
         for invalid in (0, 63, 65, 513, True):
             with self.subTest(records=invalid), self.assertRaises(ValueError):
                 generate(self.out, invalid)
+
+    def test_cli_prints_summary_and_documented_default_scale(self) -> None:
+        def run(*args: str) -> dict:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                main(["--out", str(self.out), *args])
+            return json.loads(buf.getvalue())
+
+        def scales() -> set:
+            return {t["metadata"]["records"] for t in read_jsonl(self.out / "full.jsonl")}
+
+        self.assertEqual(run()["full"], 3)
+        self.assertEqual(DEFAULT_RECORDS, 128)
+        self.assertEqual(scales(), {128})
+        run("--records", "64")
+        self.assertEqual(scales(), {64})
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            main(["--out", str(self.out), "--records", "100"])
 
 
 if __name__ == "__main__":
