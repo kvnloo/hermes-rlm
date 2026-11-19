@@ -28,12 +28,25 @@ class SendRequestPins(unittest.TestCase):
     def request(self, replies):
         s = self.session()
         parent = mock.Mock()
-        parent._read.side_effect = replies + [AssertionError('read past done')]
+        queue = replies + [AssertionError('read past done')]
+
+        def read(deadline):
+            r = queue.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            first = parent._send.call_args_list[0].args[0]
+            if r['type'] == 'done' and 'tok' in first:
+                r['tok'] = first['tok']  # a real kernel echoes the request's token
+            return r
+        parent._read.side_effect = read
         parent._serve_llm.side_effect = lambda r: ('served', r['id'])
         for n in ('_send', '_read', '_serve_llm'):
             setattr(s, n, getattr(parent, n))
         msg, deadline = {'type': 'exec'}, object()
-        return s._request(msg, deadline), parent, msg, deadline
+        got = s._request(msg, deadline)
+        sent = parent._send.call_args_list[0].args[0]
+        self.assertEqual({k: v for k, v in sent.items() if k != 'tok'}, msg)  # a request token is the only tolerated extra key
+        return got, parent, sent, deadline
 
     def test_immediate_done(self):
         done = {'type': 'done', 'stdout': 'x'}
