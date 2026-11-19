@@ -25,6 +25,9 @@ class BenchWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(step)
         self.assertRegex(step.group(0), r"(?m)^        env:\n          BENCH_REQUIRE_DEPS: '1'$")
 
+    def test_runs_tests_dir_suite(self):
+        self.assertRegex(self.text, r"(?m)^        run: python -m unittest discover -s tests$")
+
 
 if __name__ == "__main__":
     unittest.main()
