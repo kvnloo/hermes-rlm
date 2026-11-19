@@ -41,6 +41,7 @@ class RegisterPins(unittest.TestCase):
             toolset, s, h, kw = self.ctx.tools[name]
             self.assertEqual(toolset, rlm.TOOLSET)
             self.assertIs(s, schema)
+            self.assertEqual(s['name'], name)
             self.assertIs(h, handler)
             self.assertEqual(kw['description'], schema['description'])
             self.assertEqual(kw['emoji'], '🧮')
