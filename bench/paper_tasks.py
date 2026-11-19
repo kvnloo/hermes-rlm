@@ -101,6 +101,10 @@ def parse_pairs(answer):
     return pairs
 
 
+class DateParserUnavailable(ValueError):
+    """Date normalization cannot run without its optional evaluator dependency."""
+
+
 def score_task(task: dict, answer: str) -> float:
     """Return a deterministic score in [0, 1]; no judge or model access."""
     scoring = task["scoring"]
@@ -124,10 +128,13 @@ def score_task(task: dict, answer: str) -> float:
             # date from affecting incomplete dates, and reject incomplete dates.
             try:
                 from dateutil.parser import parse
+            except ImportError as exc:
+                raise DateParserUnavailable("OOLONG date scoring requires python-dateutil") from exc
+            try:
                 first = parse(prediction, default=datetime(2000, 1, 1))
                 second = parse(prediction, default=datetime(2001, 2, 2))
                 return float(first == second == datetime.fromisoformat(gold))
-            except (ImportError, ValueError, OverflowError):
+            except (ValueError, OverflowError):
                 return 0.0
         return 0.0
     text = answer_text(answer)
