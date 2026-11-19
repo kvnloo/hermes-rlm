@@ -102,6 +102,8 @@ class SyntheticLongContextTests(unittest.TestCase):
                 ]
                 self.assertEqual(matches, [task["gold"]])
                 self.assertEqual(sum("ticket=T-" in line for line in lines), n * 3)
+                # Gold must not leak outside the target's own ledger row.
+                self.assertEqual(Path(task["context_path"]).read_text().count(task["gold"]), 1)
 
     def test_multihop_gold_requires_three_distinct_joins(self) -> None:
         for n in SIZES:
@@ -152,6 +154,8 @@ class SyntheticLongContextTests(unittest.TestCase):
                     re.M,
                 )
                 self.assertEqual(len(rows), n * 4)
+                # Only two header lines plus the rows: no stray line may state the sum.
+                self.assertEqual(len(context.splitlines()), n * 4 + 2)
                 self.assertEqual(len({row[0] for row in rows}), len(rows))
                 expected = sum(
                     int(units) for _, region, status, units in rows
