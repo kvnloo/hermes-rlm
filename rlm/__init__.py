@@ -146,6 +146,7 @@ class Session:
 
     def _spawn(self) -> None:
         try:
+            self._rbuf = bytearray()
             self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                          stderr=subprocess.DEVNULL, text=True, bufsize=1)
             if self.context is not None:
@@ -161,24 +162,32 @@ class Session:
         self.proc = None
 
     def _read(self, deadline: float) -> dict:
-        while True:
+        # Own the line buffering: select() can't see a line already pulled into a buffered text wrapper.
+        fd = self.proc.stdout.fileno()
+        scan = 0  # only look for the newline in new bytes: a 50 MB line must not be rescanned per chunk
+        while (nl := self._rbuf.find(b"\n", scan)) < 0:
+            scan = len(self._rbuf)
             left = deadline - time.monotonic()
             if left <= 0:
                 raise TimeoutError
-            ready, _, _ = select.select([self.proc.stdout], [], [], min(left, 1.0))
+            ready, _, _ = select.select([fd], [], [], min(left, 1.0))
             if ready:
-                try:
-                    line = self.proc.stdout.readline()  # invalid UTF-8 raises UnicodeDecodeError (a ValueError)
-                    if not line:
-                        raise RuntimeError("sandbox kernel exited")
-                    msg = json.loads(line)
-                    if not (isinstance(msg, dict) and ((msg.get("type") == "done" and isinstance(msg.get("stdout") or "", str)) or (
-                            msg.get("type") == "llm" and "id" in msg and isinstance(msg.get("prompts"), list)
-                            and all(isinstance(p, str) for p in msg["prompts"])))):
-                        raise ValueError("wrong shape")
-                    return msg
-                except ValueError:  # torn, junk or wrong-shaped line: the protocol stream is unusable
-                    raise RuntimeError("sandbox kernel sent a malformed protocol line") from None
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    raise RuntimeError("sandbox kernel sent a malformed protocol line" if self._rbuf
+                                       else "sandbox kernel exited")
+                self._rbuf += chunk
+        line = bytes(self._rbuf[:nl])
+        del self._rbuf[: nl + 1]
+        try:
+            msg = json.loads(line.decode())  # invalid UTF-8 raises UnicodeDecodeError (a ValueError)
+            if not (isinstance(msg, dict) and ((msg.get("type") == "done" and isinstance(msg.get("stdout") or "", str)) or (
+                    msg.get("type") == "llm" and "id" in msg and isinstance(msg.get("prompts"), list)
+                    and all(isinstance(p, str) for p in msg["prompts"])))):
+                raise ValueError("wrong shape")
+            return msg
+        except ValueError:  # torn, junk or wrong-shaped line: the protocol stream is unusable
+            raise RuntimeError("sandbox kernel sent a malformed protocol line") from None
 
     def _send(self, msg: dict) -> None:
         self.proc.stdin.write(json.dumps(msg) + "\n")
