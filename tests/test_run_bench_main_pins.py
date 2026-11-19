@@ -23,16 +23,18 @@ class RunHermes(unittest.TestCase):
     def _run(self, arm, proc, run_dir):
         args = SimpleNamespace(provider="prov", model="mod", timeout=5)
         with mock.patch.object(run_bench.subprocess, "run", return_value=proc) as r, \
-                mock.patch.object(run_bench, "hermes_usage", return_value={"api_calls": 3}):
+                mock.patch.object(run_bench, "hermes_usage", return_value={"api_calls": 3}) as u:
+            self.usage = u
             row = run_bench.run_hermes(arm, "PROMPT", "/corp", args, run_dir)
         return row, r
 
-    def test_answer_is_text_before_last_session_marker_and_session_id_is_last(self):
+    def test_answer_is_text_before_first_session_marker_and_session_id_is_last(self):
         with tempfile.TemporaryDirectory() as d:
             row, r = self._run("hermes-tools", _cp("the reply\nANSWER: 5\nsession_id: s1\nsession_id: s2\n", "err"), Path(d))
         self.assertEqual(row["answer"], "the reply\nANSWER: 5")
         self.assertEqual(row["session_id"], "s2")
         self.assertEqual(row["api_calls"], 3)
+        self.usage.assert_called_once_with("s2")  # usage is looked up for the parsed session
         self.assertNotIn("subcalls", row)  # only the hermes-rlm arm reads the rlm log
         cmd = r.call_args.args[0]
         self.assertEqual(cmd, ["hermes", "chat", "--oneshot", "-Q", "-t", "file,terminal,code_execution",
