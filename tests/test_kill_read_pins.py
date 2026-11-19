@@ -27,6 +27,12 @@ class KillReadPins(unittest.TestCase):
         proc.wait.assert_not_called()
         self.assertIsNone(s.proc)
 
+    def test_kill_without_proc_is_noop(self):
+        s = self.session()
+        self.assertIsNone(s.proc)
+        s.kill()
+        self.assertIsNone(s.proc)
+
     def read(self, left):
         s = self.session()
         s.proc = mock.Mock()
