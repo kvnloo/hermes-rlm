@@ -34,3 +34,7 @@ class KernelMainPins(unittest.TestCase):
         r = self.s.exec('FINAL(5)')
         self.assertEqual(r.get('final'), '5')
         self.assertIsNone(self.s.exec('1').get('final'))
+
+    def test_error_is_per_cell(self):
+        self.assertIn('ZeroDivisionError', self.s.exec('1 / 0')['error'])
+        self.assertIsNone(self.s.exec('1').get('error'))
