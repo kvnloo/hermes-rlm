@@ -102,11 +102,12 @@ def run_nano(prompt, corpus_dir, args, run_dir):
     wall = time.monotonic() - t0
     try:
         res = json.loads(p.stdout.strip().splitlines()[-1])
-    except (IndexError, json.JSONDecodeError):
+        answer = res["answer"][-2000:]
+    except (IndexError, json.JSONDecodeError, KeyError, TypeError):
         return {"answer": "", "wall_s": round(wall, 2), "error": (p.stderr or p.stdout)[-1500:]}
     snap = res.get("snapshot") or {}
     usage = snap.get("usage") or snap.get("token_usage") or {}
-    return {"answer": res["answer"][-2000:], "wall_s": round(wall, 2), "nano_usage": usage,
+    return {"answer": answer, "wall_s": round(wall, 2), "nano_usage": usage,
             "nano_metrics": snap.get("metrics"), "nano_stop": snap.get("last_stop_reason")}
 
 
