@@ -27,6 +27,15 @@ class LoadCorpusDedupe(unittest.TestCase):
             corpus, _ = rlm.load_corpus([f"{d}/y.txt", d], 5)
             self.assertEqual(corpus, {"y.txt": "hello"})
 
+    def test_dedupe_keeps_first_seen_order_and_counts_binary_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.txt").write_text("A")
+            (Path(d) / "z.txt").write_text("Z")
+            (Path(d) / "bin").write_bytes(b"\0x")
+            corpus, skipped = rlm.load_corpus([f"{d}/z.txt", f"{d}/bin", d], 100)
+            self.assertEqual(list(corpus), ["z.txt", "a.txt"])  # first-seen, not sorted
+            self.assertEqual(skipped, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
