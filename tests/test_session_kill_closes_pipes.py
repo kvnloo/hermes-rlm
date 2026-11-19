@@ -48,8 +48,17 @@ class SessionKillClosesPipes(unittest.TestCase):
         with self.assertRaises(OSError):
             s._send({"a": 1})  # leaves unflushable bytes in stdin's buffer
         s.kill()
-        self.assertTrue(proc.stdout.closed)
+        self.assertTrue(proc.stdout.closed and proc.stdin.closed)
         self.assertIsNone(s.proc)
+
+    def test_exec_respawn_of_dead_kernel_releases_old_pipes(self):
+        s = self.session()
+        old = s.proc
+        old.kill()
+        old.wait()
+        s.exec("1")
+        self.assertIsNot(s.proc, old)
+        self.assertTrue(old.stdin.closed and old.stdout.closed)
 
     def test_kill_without_process_is_noop(self):
         s = self.session()

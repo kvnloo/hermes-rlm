@@ -233,6 +233,7 @@ class Session:
         lim = self.lim
         with self.lock:
             if self.proc is None or self.proc.poll() is not None:
+                self.kill()
                 self._spawn()
             t0 = time.monotonic()
             before = dict(self.stats)
