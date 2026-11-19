@@ -191,8 +191,12 @@ class Session:
             return {"type": "llm_result", "id": req["id"], "error":
                     f"prompt of {big} chars exceeds RLM_MAX_PROMPT_CHARS={lim['max_prompt_chars']}; "
                     "split the slice into smaller chunks"}
+        try:
+            max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]), 32_000)
+        except (TypeError, ValueError, OverflowError) as exc:  # model code controls this value
+            return {"type": "llm_result", "id": req["id"], "error":
+                    f"max_tokens must be an integer ({type(exc).__name__}); omit it or pass a number"}
         self.stats["subcalls"] += len(prompts)
-        max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]), 32_000)
 
         def one(prompt: str):
             t0 = time.monotonic()
