@@ -42,7 +42,7 @@ Each manifest line contains `id`, `family`, `size_tokens`, `context_path`, `ques
 
 Each run gets a new `input/` working directory containing only an unlabeled copy named `context.txt`. The manifest and gold remain outside that directory. Prompt construction allows only the question, choices, and size metadata. Arbitrary metadata and scoring fields never enter a model prompt. This is a benchmark separation rule, not a hostile-agent filesystem security boundary. Nano's reference code executes host-side Python and is not given a new filesystem sandbox by this harness.
 
-`paper_tasks.score_task(task, answer)` supplies deterministic grading. Numeric returns become `{"score": value}`. A dictionary return must contain `score`. The dataset worker defines exact parsing, OOLONG numeric grades, CodeQA choices, and Pairs F1. The harness never inserts an LLM judge or substitutes binary correctness for a graded score.
+`paper_tasks.score_task(task, answer)` supplies deterministic grading. Numeric returns become `{"score": value}`. A dictionary return must contain `score`. The score must be representable as a finite number; a bad score makes the row invalid, not a zero-score result. The dataset worker defines exact parsing, OOLONG numeric grades, CodeQA choices, and Pairs F1. The harness never inserts an LLM judge or substitutes binary correctness for a graded score.
 
 `size_tokens` is the dataset label, not a measured root tokenizer count. Base truncation is explicitly character-based, controlled by `--base-context-chars`. It is not presented as exact token-window replication. The chosen cap must leave room for the question and output within the selected provider's model window.
 

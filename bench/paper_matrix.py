@@ -10,6 +10,7 @@ from contextlib import closing
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -106,11 +107,21 @@ def score_answer(task, answer, module_path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     result = module.score_task(task, answer)
-    if isinstance(result, (float, int, bool)):
-        result = {"score": float(result)}
+    scalar = isinstance(result, (float, int))
+    if scalar:
+        result = {"score": result}
     if not isinstance(result, dict) or "score" not in result:
         raise ValueError("score_task must return a numeric score or dict containing score")
-    return result
+    score = result["score"]
+    if not isinstance(score, (float, int)):
+        raise ValueError("score_task score must be a finite number")
+    try:
+        score = float(score)
+    except OverflowError as exc:
+        raise ValueError("score_task score must be a finite number") from exc
+    if not math.isfinite(score):
+        raise ValueError("score_task score must be a finite number")
+    return {"score": score} if scalar else result
 
 
 def task_prompt(task, arm):

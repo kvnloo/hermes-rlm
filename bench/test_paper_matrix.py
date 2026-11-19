@@ -156,6 +156,26 @@ class MatrixTests(unittest.TestCase):
         pair = dict(self.task, scoring="pairs_f1", gold=[[1, 2], [1, 3]])
         self.assertAlmostEqual(matrix.score_answer(pair, "ANSWER: [(2,1)]", matrix.HERE / "paper_tasks.py")["score"], 2/3)
 
+    def test_scoring_hook_rejects_nonfinite_and_nonnumeric_grades(self):
+        scorer = self.root / "custom_scorer.py"
+        scorer.write_text("def score_task(task, answer):\n    return task['fixture_grade']\n")
+        rejected = (float("nan"), float("inf"), 10 ** 400,
+                    {"score": float("-inf")}, {"score": None}, {"score": "0.5"})
+        for grade in rejected:
+            with self.subTest(grade=grade), self.assertRaisesRegex(ValueError, "score"):
+                matrix.score_answer(dict(self.task, fixture_grade=grade), "answer", scorer)
+
+    def test_scoring_hook_preserves_valid_numeric_and_dict_grades(self):
+        scorer = self.root / "custom_scorer.py"
+        scorer.write_text("def score_task(task, answer):\n    return task['fixture_grade']\n")
+        for grade, expected in ((0, {"score": 0.0}), (0.25, {"score": 0.25}),
+                                (True, {"score": 1.0}), (-0.1, {"score": -0.1}),
+                                ({"score": 2 ** 53 + 1, "note": "ok"}, {"score": 2 ** 53 + 1, "note": "ok"})):
+            with self.subTest(grade=grade):
+                result = matrix.score_answer(dict(self.task, fixture_grade=grade), "answer", scorer)
+                self.assertEqual(result, expected)
+                self.assertIs(type(result["score"]), type(expected["score"]))
+
     def test_interleaving_resume_invalid_is_terminal(self):
         task = dict(self.task, task_sha256="hash")
         scheduled = list(matrix.schedule([task], matrix.ARMS, 2))
