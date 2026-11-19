@@ -16,6 +16,7 @@ import atexit
 import contextvars
 import glob as _glob
 import json
+import math
 import os
 import select
 import shutil
@@ -204,7 +205,12 @@ class Session:
             t0 = time.monotonic()
             try:
                 text, usage = self.subcall(prompt, max_tokens)
-                text, usage = text or "", usage or {}  # no usage / no text must not sink the batch
+                text = text or ""  # no text / no usage must not sink the batch
+                if not isinstance(text, str):
+                    raise TypeError(f"subcall returned {type(text).__name__}, not text")
+                usage = {k: usage[k] for k in ("prompt_tokens", "completion_tokens", "cost_usd")
+                         if isinstance(usage, dict) and isinstance(usage.get(k), (int, float))
+                         and not (isinstance(usage[k], float) and not math.isfinite(usage[k]))}  # only finite numbers reach the log row and stats
             except Exception as exc:  # one failed slice must not sink the batch
                 text, usage = f"[llm_query error: {type(exc).__name__}: {exc}]", {}
             self.log("subcall", prompt_chars=len(prompt), output_chars=len(text),
