@@ -64,6 +64,14 @@ class ServeLlmMalformedResult(unittest.TestCase):
         _, _, rows = serve(("txt", {"prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0}))
         self.assertEqual((rows[0]["prompt_tokens"], rows[0]["cost_usd"]), (0, 0.0))
 
+    def test_fractional_token_counts_are_dropped_but_whole_and_cost_survive(self):
+        # tokens are whole numbers; 3.7 would make stats and bench's summed log rows fractional
+        r, stats, rows = serve(("txt", {"prompt_tokens": 3.7, "completion_tokens": 4.0, "cost_usd": 0.25}))
+        self.assertEqual(r["results"], ["txt"])
+        self.assertEqual((stats["prompt_tokens"], stats["completion_tokens"]), (0, 4))
+        self.assertNotIn("prompt_tokens", rows[0])
+        self.assertEqual((rows[0]["completion_tokens"], rows[0]["cost_usd"]), (4.0, 0.25))
+
     def test_non_text_result_becomes_error_slice(self):
         r, _, _ = serve((5, {"prompt_tokens": 1}))
         self.assertTrue(r["results"][0].startswith("[llm_query error: TypeError"))
