@@ -21,6 +21,11 @@ class DefaultSubcallNoneUsage(unittest.TestCase):
     def test_text_survives_and_usage_is_empty(self):
         self.assertEqual(rlm.default_subcall("p", 8), ("ok", {}))
 
+    def test_none_text_with_none_usage_is_empty_string(self):
+        rlm._CTX = SimpleNamespace(llm=SimpleNamespace(
+            complete=lambda **kw: SimpleNamespace(text=None, usage=None)))
+        self.assertEqual(rlm.default_subcall("p", 8), ("", {}))
+
     def test_serve_llm_returns_text_not_error(self):
         with tempfile.TemporaryDirectory() as d:
             s = rlm.Session("t", log_dir=Path(d))
