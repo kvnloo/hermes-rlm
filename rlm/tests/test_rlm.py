@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,30 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("rlm_plugin", PLUGIN_DIR / "__init__.py")
 rlm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rlm)
+
+
+def _stub_if_missing(monkeypatch, name, **attrs):
+    """Install a stub module only when the real (Hermes-provided) one cannot be imported."""
+    try:
+        importlib.import_module(name)
+        return
+    except ImportError:
+        pass
+    mod = types.ModuleType(name)
+    for k, v in attrs.items():
+        setattr(mod, k, v)
+    monkeypatch.setitem(sys.modules, name, mod)
+    parent, _, child = name.rpartition(".")
+    if parent:
+        monkeypatch.setattr(sys.modules[parent], child, mod, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def hermetic_hermes_modules(tmp_path, monkeypatch):
+    """Outside Hermes, hermes_constants / tools.file_tools_paths do not exist; stub them."""
+    _stub_if_missing(monkeypatch, "hermes_constants", get_hermes_home=lambda: tmp_path / "hermes-home")
+    _stub_if_missing(monkeypatch, "tools")
+    _stub_if_missing(monkeypatch, "tools.file_tools_paths", _resolve_base_dir=lambda task_id="default", **_: Path.cwd())
 
 
 def fake_subcall(prompt, max_tokens):
@@ -117,3 +143,10 @@ def test_relative_paths_anchor_at_task_workspace_not_process_cwd(session, tmp_pa
     monkeypatch.setattr("tools.file_tools_paths._resolve_base_dir", lambda task_id="default", **_: session.corpus_dir)
     out = session.load(["b.txt"], task_id="t")
     assert out["files"] == 1 and "error" not in out
+
+
+def test_stub_helper_keeps_a_real_module(monkeypatch):
+    sentinel = types.ModuleType("hrs_present_mod")
+    monkeypatch.setitem(sys.modules, "hrs_present_mod", sentinel)
+    _stub_if_missing(monkeypatch, "hrs_present_mod", x=1)
+    assert sys.modules["hrs_present_mod"] is sentinel and not hasattr(sentinel, "x")
