@@ -1,6 +1,8 @@
 """Two protocol lines arriving in one pipe read must both be seen: _read may not strand the second behind the first."""
+import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -71,6 +73,38 @@ class ReadBufferedLines(unittest.TestCase):
         s._rbuf = bytearray(b'{"type": "done"}\n')
         with self.assertRaises(TimeoutError):
             s._read(time.monotonic())
+
+
+class ReadOverRealPipe(unittest.TestCase):
+    def session(self):
+        r, wfd = os.pipe()
+        w = os.fdopen(wfd, "wb", buffering=0)
+        self.addCleanup(w.close)
+        stdout = os.fdopen(r)
+        self.addCleanup(stdout.close)
+        s = rlm.Session("t", log_dir=Path(tempfile.gettempdir()))
+        s.proc = mock.Mock(stdout=stdout)
+        s._rbuf = bytearray()
+        return s, w
+
+    def test_newline_arriving_in_a_later_read_completes_the_line(self):
+        s, w = self.session()
+        w.write(b'{"type": "done", "stdout": "x"}')
+        threading.Timer(0.2, w.write, (b"\n",)).start()  # the "\n" is the first byte of the next chunk
+        self.assertEqual(s._read(time.monotonic() + 3)["stdout"], "x")
+
+    def test_eof_after_partial_line_is_malformed(self):
+        s, w = self.session()
+        w.write(b'{"type": "do')
+        w.close()
+        with self.assertRaisesRegex(RuntimeError, "malformed"):
+            s._read(time.monotonic() + 3)
+
+    def test_clean_eof_is_kernel_exited(self):
+        s, w = self.session()
+        w.close()
+        with self.assertRaisesRegex(RuntimeError, "kernel exited"):
+            s._read(time.monotonic() + 3)
 
 
 if __name__ == "__main__":
