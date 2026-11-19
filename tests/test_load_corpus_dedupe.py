@@ -18,7 +18,7 @@ class LoadCorpusDedupe(unittest.TestCase):
             (root / "bin").write_bytes(b"\0x")
             corpus, skipped = rlm.load_corpus(f"{d}/**", 7)  # exactly 5 + 2 chars
             self.assertEqual(corpus, {"s/a.txt": "hello", "b.txt": "hi"})
-            self.assertEqual(list(corpus), ["s/a.txt", "b.txt"])
+            self.assertEqual(list(corpus), ["b.txt", "s/a.txt"])
             self.assertEqual(skipped, 1)
 
     def test_overlapping_paths_count_once(self):
