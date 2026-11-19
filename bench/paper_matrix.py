@@ -492,6 +492,8 @@ def main(argv=None):
         raise ValueError("unknown or duplicate arms")
     if min(args.repeats, args.timeout, args.max_subcalls, args.max_turns, args.base_context_chars) < 1:
         raise ValueError("budgets and repeats must be positive")
+    if args.limit_tasks is not None and args.limit_tasks < 1:
+        raise ValueError("--limit-tasks must be positive")
     args.ops_dir.mkdir(parents=True, exist_ok=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # One controller per output; the request ledger additionally serializes provider reservations.
