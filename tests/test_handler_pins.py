@@ -59,12 +59,32 @@ class HandlerPins(unittest.TestCase):
         with mock.patch.object(rlm, 'session_for', side_effect=OSError('nolog')):
             self.assertEqual(json.loads(rlm._exec_handler({'code': 'x'})), {'error': 'OSError: nolog'})
 
+    def test_none_args_fall_back_to_defaults(self):
+        f = Fake()
+        self.patch(f)
+        rlm._load_handler({'paths': None}, task_id=None)
+        rlm._exec_handler({'code': None})
+        self.assertEqual(f.calls, [('load', [], 'default'), ('exec', '')])
+
+    def test_exec_success_returns_json_of_result(self):
+        self.patch(Fake())
+        self.assertEqual(rlm._exec_handler({'code': 'x'}), '{"stdout": "ok"}')
+
+    def test_any_exception_type_is_enveloped(self):
+        class Boom(Exception):
+            pass
+        self.patch(Fake(boom=Boom('b')))
+        self.assertEqual(json.loads(rlm._load_handler({})), {'error': 'Boom: b'})
+        self.assertEqual(json.loads(rlm._exec_handler({})), {'error': 'Boom: b'})
+
     def test_rlm_command_lists_limits_and_sessions(self):
         with mock.patch.dict(rlm._sessions, {}, clear=True):
             self.assertTrue(rlm._rlm_command().endswith('\nno RLM sessions yet'))
             rlm._sessions['k'] = Fake()
+            rlm._sessions['j'] = Fake()
             out = rlm._rlm_command('ignored')
-        self.assertEqual(out, 'RLM limits: ' + json.dumps(rlm.limits()) + "\nk: {'cells': 1} log=/x.jsonl")
+        row = "{'cells': 1} log=/x.jsonl"
+        self.assertEqual(out, 'RLM limits: ' + json.dumps(rlm.limits()) + f"\nk: {row}\nj: {row}")
 
 
 if __name__ == "__main__":
