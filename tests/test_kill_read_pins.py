@@ -16,7 +16,7 @@ class KillReadPins(unittest.TestCase):
         s = self.session()
         proc = s.proc = mock.Mock(**{'poll.return_value': None})
         s.kill()
-        self.assertEqual(proc.mock_calls, [mock.call.poll(), mock.call.kill(), mock.call.wait()])
+        self.assertEqual(proc.mock_calls, [mock.call.poll(), mock.call.kill(), mock.call.wait(), mock.call.stdin.close(), mock.call.stdout.close()])
         self.assertIsNone(s.proc)
 
     def test_kill_exited_proc_not_killed_but_cleared(self):

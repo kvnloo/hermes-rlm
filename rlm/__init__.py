@@ -15,6 +15,7 @@ from __future__ import annotations
 import atexit
 import contextvars
 import glob as _glob
+import contextlib
 import json
 import os
 import select
@@ -150,6 +151,10 @@ class Session:
         if self.proc and self.proc.poll() is None:
             self.proc.kill()
             self.proc.wait()
+        if self.proc:
+            for pipe in (self.proc.stdin, self.proc.stdout):
+                with contextlib.suppress(OSError):
+                    pipe.close()
         self.proc = None
 
     def _read(self, deadline: float) -> dict:
