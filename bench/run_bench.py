@@ -106,7 +106,7 @@ def run_nano(prompt, corpus_dir, args, run_dir):
         if not isinstance(answer, str):
             raise TypeError("answer must be a string")
     except (IndexError, json.JSONDecodeError, KeyError, TypeError):
-        return {"answer": "", "wall_s": round(wall, 2), "error": (p.stderr or p.stdout)[-1500:]}
+        return {"answer": "", "wall_s": round(wall, 2), "error": (p.stderr or p.stdout)[-1500:] or "nano produced no output"}
     snap = res.get("snapshot")
     snap = snap if isinstance(snap, dict) else {}
     usage = snap.get("usage") or snap.get("token_usage") or {}

@@ -101,6 +101,12 @@ class RunNano(unittest.TestCase):
         row, _ = self._run(_cp("{\"answer\": \"ok\"}\ngarbage", ""))  # only the LAST line counts
         self.assertIn("error", row)
 
+    def test_crash_with_no_output_still_carries_a_truthy_error(self):
+        # main() treats a falsy row["error"] as "no error": a silent nano crash would be scored as a wrong answer
+        row, _ = self._run(_cp("", ""))
+        self.assertEqual(row["answer"], "")
+        self.assertTrue(row["error"])
+
     def test_valid_json_without_a_dict_answer_gives_error_row_not_a_crash(self):
         # main() only catches TimeoutExpired, so an escaping KeyError/TypeError/AttributeError kills the whole bench run
         for last in ("[1, 2]", "42", '"str"', "null", "{}", '{"answer": null}', '{"answer": 5}'):
