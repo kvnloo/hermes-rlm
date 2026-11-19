@@ -237,7 +237,8 @@ def main(argv=None):
             if "audit_version" in row:
                 raise ValueError("input is already audited")
             task = tasks.get(row.get("task_id"))
-            task_matches = True
+            # Older rows may not carry a task fingerprint.
+            task_matches = task is not None or not row.get("task_sha256")
             if task is not None and row.get("task_sha256"):
                 frozen = dict(task)
                 context = Path(frozen["context_path"])
@@ -247,6 +248,12 @@ def main(argv=None):
                 frozen["context_sha256"] = row.get("context_sha256")
                 task_matches = json_sha(frozen) == row["task_sha256"]
             checked = audit_row(row, task if task_matches else None, ops)
+            if not task_matches:
+                reason = "missing_or_mismatched_task"
+                if reason not in checked["audit_reasons"]:
+                    checked["audit_reasons"].append(reason)
+                checked.update(valid=False, score=None, correct=None, status="invalid",
+                               grading=None, error=checked["audit_reasons"][0])
             checked.update(source_sha=source_hash, source_row_sha256=sha(line),
                            source_line=line_number, audit_source_sha256=source_hashes)
             audited.append(checked)
