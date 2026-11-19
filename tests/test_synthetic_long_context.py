@@ -228,6 +228,15 @@ class SyntheticLongContextTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             main(["--out", str(self.out), "--records", "100"])
 
+    def test_cli_requires_out_and_prints_sorted_json(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            main([])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main(["--out", str(self.out)])
+        line = buf.getvalue().strip()
+        self.assertEqual(line, json.dumps(json.loads(line), sort_keys=True))
+
 
 if __name__ == "__main__":
     unittest.main()
