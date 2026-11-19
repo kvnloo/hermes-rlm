@@ -23,6 +23,14 @@ class CellShapeTests(unittest.TestCase):
         r = self.s.exec('x + 1')
         self.assertEqual((r['error'], r['stdout'].strip()), (None, '42'))
 
+    def test_only_trailing_expression_is_echoed_as_repr(self):
+        r = self.s.exec("1\n'a'")
+        self.assertEqual((r['error'], r['stdout'].strip()), (None, "'a'"))
+        r = self.s.exec('y = 2\ny')
+        self.assertEqual((r['error'], r['stdout'].strip()), (None, '2'))
+        r = self.s.exec('None')
+        self.assertEqual((r['error'], r['stdout']), (None, ''))
+
 
 if __name__ == '__main__':
     unittest.main()
