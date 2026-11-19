@@ -1,6 +1,8 @@
 """Pin Session._serve_llm success path: result order, failed-slice isolation, stats accumulation, subcall log usage fields."""
 import json
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 import rlm
@@ -21,6 +23,21 @@ class ServeLlmSuccessPins(unittest.TestCase):
         reply = self.s._serve_llm({'id': 4, 'prompts': ['a', 'bad', 'ccc']})
         self.assertEqual(reply, {'type': 'llm_result', 'id': 4,
                                  'results': ['A', '[llm_query error: ValueError: boom]', 'CCC']})
+
+    def test_results_follow_prompt_order_when_first_prompt_finishes_last(self):
+        gate = threading.Event()
+
+        def sub(prompt, max_tokens):
+            if prompt == 'first':
+                self.assertTrue(gate.wait(5))
+                time.sleep(0.2)
+            else:
+                gate.set()
+            return prompt, {}
+        self.s.subcall = sub
+        self.s.lim['concurrency'] = 2
+        reply = self.s._serve_llm({'id': 1, 'prompts': ['first', 'second']})
+        self.assertEqual(reply['results'], ['first', 'second'])
 
     def test_stats_accumulate_per_prompt_and_failed_slice_adds_no_tokens(self):
         self.s.stats.update(subcalls=1, subcall_prompt_chars=10, prompt_tokens=5, completion_tokens=7)
