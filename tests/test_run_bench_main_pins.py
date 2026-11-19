@@ -1,5 +1,6 @@
 """Pin run_bench.run_hermes parsing and main()'s provider-outage stop (no hermes binary, network or user home)."""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -39,6 +40,7 @@ class RunHermes(unittest.TestCase):
         kw = r.call_args.kwargs
         self.assertEqual((kw["cwd"], kw["timeout"]), ("/corp", 5))
         self.assertEqual(kw["env"]["RLM_LOG_DIR"], d)
+        self.assertEqual(kw["env"]["PATH"], os.environ["PATH"])  # inherited, not replaced
         self.assertEqual(kw["env"]["HERMES_HOME"], str(run_bench.HERMES_HOME))
 
     def test_stderr_is_part_of_the_text_and_wall_is_monotonic_elapsed_to_2dp(self):
@@ -49,9 +51,9 @@ class RunHermes(unittest.TestCase):
 
     def test_no_marker_gives_empty_session_id_and_answer_tail_is_capped(self):
         with tempfile.TemporaryDirectory() as d:
-            row, _ = self._run("hermes-tools", _cp("x" * 2500), Path(d))
+            row, _ = self._run("hermes-tools", _cp("h" * 500 + "t" * 2000), Path(d))
         self.assertEqual(row["session_id"], "")
-        self.assertEqual(row["answer"], "x" * 2000)
+        self.assertEqual(row["answer"], "t" * 2000)  # the tail is kept, not the head
 
     def test_rlm_arm_adds_usage_from_that_sessions_log(self):
         with tempfile.TemporaryDirectory() as d:
