@@ -85,6 +85,16 @@ class NanoClientPins(unittest.TestCase):
         self.assertIsNone(res["snapshot"])
         self.assertIsInstance(res["wall_s"], float)
 
+    def test_wall_s_is_monotonic_elapsed_rounded_to_2dp(self):
+        mod, _, _ = load(None, None)
+        ticks = iter([100.0, 101.23456])
+        mod.time = types.SimpleNamespace(monotonic=lambda: next(ticks), time=lambda: 5)
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, ENV, clear=True), contextlib.redirect_stdout(out):
+            asyncio.run(mod.main("P"))
+        res = json.loads(out.getvalue())
+        self.assertEqual(res["wall_s"], 1.23)
+
     def test_unknown_client_callbacks_are_noops(self):
         mod, _, _ = load(None, None)
         c = mod.Client()
