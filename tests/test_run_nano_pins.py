@@ -107,6 +107,18 @@ class RunNano(unittest.TestCase):
             row, _ = self._run(_cp(last, "ERR"))
             self.assertEqual(row, {"answer": "", "wall_s": 1.23, "error": "ERR"}, last)
 
+    def test_non_string_answer_gives_error_row(self):
+        # a list survives the [-2000:] slice but later crashes score() (re.findall on a list)
+        for last in ('{"answer": ["a"]}', '{"answer": {"k": "v"}}', '{"answer": 5}'):
+            row, _ = self._run(_cp(last, "ERR"))
+            self.assertEqual(row, {"answer": "", "wall_s": 1.23, "error": "ERR"}, last)
+
+    def test_non_dict_snapshot_is_treated_as_empty_and_keeps_the_answer(self):
+        for snap in ("x", [1], 1, True):
+            row, _ = self._run(_cp(json.dumps({"answer": "a", "snapshot": snap})))
+            self.assertEqual(row, {"answer": "a", "wall_s": 1.23, "nano_usage": {},
+                                   "nano_metrics": None, "nano_stop": None}, snap)
+
 
 if __name__ == "__main__":
     unittest.main()

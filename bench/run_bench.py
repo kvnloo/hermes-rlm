@@ -103,9 +103,12 @@ def run_nano(prompt, corpus_dir, args, run_dir):
     try:
         res = json.loads(p.stdout.strip().splitlines()[-1])
         answer = res["answer"][-2000:]
+        if not isinstance(answer, str):
+            raise TypeError("answer must be a string")
     except (IndexError, json.JSONDecodeError, KeyError, TypeError):
         return {"answer": "", "wall_s": round(wall, 2), "error": (p.stderr or p.stdout)[-1500:]}
-    snap = res.get("snapshot") or {}
+    snap = res.get("snapshot")
+    snap = snap if isinstance(snap, dict) else {}
     usage = snap.get("usage") or snap.get("token_usage") or {}
     return {"answer": answer, "wall_s": round(wall, 2), "nano_usage": usage,
             "nano_metrics": snap.get("metrics"), "nano_stop": snap.get("last_stop_reason")}
