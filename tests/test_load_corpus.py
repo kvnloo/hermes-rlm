@@ -1,7 +1,9 @@
 """load_corpus(): file/dir/glob expansion, relative keys, binary and .git skipping, budget, missing path."""
+import glob
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import rlm
 
@@ -62,6 +64,17 @@ class LoadCorpusTests(unittest.TestCase):
         (self.root / "bad.txt").write_bytes(b"x\xffy")
         corpus, _ = rlm.load_corpus(str(self.root / "bad.txt"), 1000)
         self.assertEqual(corpus, {"bad.txt": "x�y"})
+
+    def test_expansion_order_is_sorted_not_filesystem_order(self):
+        (self.root / "src" / "c.txt").write_text("gamma")
+        real_rglob, real_glob = Path.rglob, glob.glob
+        rev = lambda it: sorted(it, reverse=True)
+        with mock.patch.object(Path, "rglob", lambda self, *a, **k: rev(real_rglob(self, *a, **k))):
+            corpus, _ = rlm.load_corpus(str(self.root / "src"), 1000)
+        self.assertEqual(list(corpus), ["a.txt", "c.txt", "sub/b.txt"])
+        with mock.patch.object(glob, "glob", lambda *a, **k: rev(real_glob(*a, **k))):
+            corpus, _ = rlm.load_corpus(str(self.root / "src" / "*.txt"), 1000)
+        self.assertEqual(list(corpus), ["a.txt", "c.txt"])
 
 
 if __name__ == "__main__":
