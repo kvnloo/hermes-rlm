@@ -527,7 +527,8 @@ def main(argv=None):
             raise ValueError("no tasks selected")
         shas = {k: source_sha(getattr(args, k + "_source")) for k in ("released", "fork", "nano")}
         plugin_hash = json_hash({str(p.relative_to(args.plugin_source)): digest(p)
-                               for p in sorted(args.plugin_source.glob("*.py"))})
+                               for p in sorted([*args.plugin_source.glob("*.py"),
+                                                *args.plugin_source.glob("plugin.yaml")])})
         protocol = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
                     if k not in {"out", "ops_dir", "manifest", "repeats", "dry_run", "task_ids", "limit_tasks", "smallest_sniah"}}
         protocol.update(source_shas=shas, plugin_sha256=plugin_hash,

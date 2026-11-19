@@ -68,7 +68,7 @@ Nano's native ACP runtime has one inherited model setting and no child-model ove
 
 ## Rows and resume
 
-Results include source SHAs, plugin content hash, harness and scorer hashes, task and context hashes, full answers, process status, validity, score, call counts, timing, and trace metadata. Full stdout and stderr live in `runs/<run_id>/`. Agent homes live in `homes/<run_id>/`, outside the input working directory.
+Results include source SHAs, plugin content hash (top-level Python files and `plugin.yaml`), harness and scorer hashes, task and context hashes, full answers, process status, validity, score, call counts, timing, and trace metadata. Full stdout and stderr live in `runs/<run_id>/`. Agent homes live in `homes/<run_id>/`, outside the input working directory.
 
 The row key includes task content, arm, repeat, and protocol. Completed invalid rows are terminal too, so an unavailable provider does not cause an automatic retry storm on resume. Increasing the repeat count adds only new repeats. Changing a model, budget, source SHA, plugin, harness, scorer, or copied `SOUL.md` identity creates new row keys. The optional SOUL fingerprint is omitted when no regular `SOUL.md` file is present; restoring an earlier identity can reuse its completed rows. Corrupt output is rejected rather than silently skipped. An output lock prevents concurrent controllers from writing the same JSONL file.
 
