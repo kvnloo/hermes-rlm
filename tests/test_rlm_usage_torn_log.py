@@ -39,6 +39,13 @@ class RlmUsageTornLog(unittest.TestCase):
         self.assertEqual(self._usage(text),
                          {"subcalls": 2, "sub_prompt_tokens": 4, "sub_completion_tokens": 1, "cells": 0})
 
+    def test_subcall_row_without_token_keys_counts_as_zero(self):
+        # a failed subcall logs `**{}` usage: the real writer emits a row with no token keys
+        text = ('{"event": "subcall", "prompt_chars": 3, "output_chars": 9, "ms": 1}\n'
+                '{"event": "subcall", "prompt_tokens": 4, "completion_tokens": 1}\n')
+        self.assertEqual(self._usage(text),
+                         {"subcalls": 2, "sub_prompt_tokens": 4, "sub_completion_tokens": 1, "cells": 0})
+
 
 if __name__ == "__main__":
     unittest.main()
