@@ -20,6 +20,14 @@ class RlmUsageTornLog(unittest.TestCase):
         self.assertEqual(self._usage(good + '{"event": "subc'),
                          {"subcalls": 1, "sub_prompt_tokens": 5, "sub_completion_tokens": 2, "cells": 1})
 
+    def test_bad_line_mid_log_does_not_hide_later_rows(self):
+        text = ('{"event": "subcall", "prompt_tokens": 5, "completion_tokens": 2}\n'
+                '{"event": "subc\n'
+                '{"event": "subcall", "prompt_tokens": 1, "completion_tokens": 1}\n'
+                '{"event": "cell"}\n')
+        self.assertEqual(self._usage(text),
+                         {"subcalls": 2, "sub_prompt_tokens": 6, "sub_completion_tokens": 3, "cells": 1})
+
 
 if __name__ == "__main__":
     unittest.main()
