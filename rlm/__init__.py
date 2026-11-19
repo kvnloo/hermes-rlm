@@ -144,10 +144,14 @@ class Session:
             f.write(json.dumps({"ts": time.time(), "event": event, **data}) + "\n")
 
     def _spawn(self) -> None:
-        self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.DEVNULL, text=True, bufsize=1)
-        if self.context is not None:
-            self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        try:
+            self.proc = subprocess.Popen(sandbox_argv(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            if self.context is not None:
+                self._request({"type": "load", "context": self.context}, time.monotonic() + 120)
+        except (OSError, RuntimeError) as exc:  # no kernel, or one that never loaded `context`: don't keep it
+            self.kill()
+            raise RuntimeError(f"sandbox kernel failed to start: {type(exc).__name__}: {exc}") from None
 
     def kill(self) -> None:
         if self.proc and self.proc.poll() is None:
@@ -253,11 +257,12 @@ class Session:
     def exec(self, code: str) -> dict:
         lim = self.lim
         with self.lock:
-            if self.proc is None or self.proc.poll() is not None:
-                self._spawn()
             t0 = time.monotonic()
             before = dict(self.stats)
             try:
+                if self.proc is None or self.proc.poll() is not None:
+                    self._spawn()
+                    t0 = time.monotonic()  # a slow reload doesn't eat the cell budget
                 reply = self._request({"type": "exec", "code": code}, t0 + lim["cell_timeout_s"])
             except TimeoutError:
                 self.kill()
