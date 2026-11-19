@@ -62,7 +62,9 @@ def load_tasks(manifest):
             raise ValueError(f"manifest line {n}: context_path must be a regular non-symlink file")
         if re.search(r"gold|label|manifest|answer", path.name, re.I):
             raise ValueError(f"manifest line {n}: evaluator-looking context filename")
-        if not isinstance(task["question"], str) or not isinstance(task["size_tokens"], (int, float)):
+        size = task["size_tokens"]
+        if (not isinstance(task["question"], str) or type(size) not in (int, float)
+                or size < 0 or (isinstance(size, float) and not math.isfinite(size))):
             raise ValueError(f"manifest line {n}: invalid question or size_tokens")
         task = dict(task, context_path=str(path.resolve()))
         actual_sha = digest(path)

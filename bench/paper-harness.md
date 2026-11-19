@@ -38,7 +38,7 @@ The proxy's observed request tool names prove root exposure. A Hermes RLM row wi
 
 ## Task and scorer contract
 
-Each manifest line contains `id`, `family`, `size_tokens`, `context_path`, `question`, `gold`, and `scoring`. `choices` and `metadata` are optional. Relative context paths resolve against the manifest directory. `context_path` must name one plain file, not a directory or symlink. Evaluator-looking filenames are rejected. If `metadata.context_sha256` is present, it must match the file's bytes before any runs are scheduled. Manifests without a declared hash still work; the runner records the observed hash.
+Each manifest line contains `id`, `family`, `size_tokens`, `context_path`, `question`, `gold`, and `scoring`. `choices` and `metadata` are optional. `size_tokens` must be a finite, nonnegative number (not a boolean); zero and fractional character-based estimates are accepted. Relative context paths resolve against the manifest directory. `context_path` must name one plain file, not a directory or symlink. Evaluator-looking filenames are rejected. If `metadata.context_sha256` is present, it must match the file's bytes before any runs are scheduled. Manifests without a declared hash still work; the runner records the observed hash.
 
 Each run gets a new `input/` working directory containing only an unlabeled copy named `context.txt`. The manifest and gold remain outside that directory. Prompt construction allows only the question, choices, and size metadata. Arbitrary metadata and scoring fields never enter a model prompt. This is a benchmark separation rule, not a hostile-agent filesystem security boundary. Nano's reference code executes host-side Python and is not given a new filesystem sandbox by this harness.
 
