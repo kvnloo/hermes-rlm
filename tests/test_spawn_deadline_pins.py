@@ -39,6 +39,15 @@ class SpawnDeadlinePins(unittest.TestCase):
         _, request = self.spawn(self.session(''))
         request.assert_called_once_with({'type': 'load', 'context': ''}, 1120.0)
 
+    def test_proc_is_assigned_before_the_load_request(self):
+        s = self.session({'k': 'v'})
+        seen = []
+        with mock.patch.object(rlm.subprocess, 'Popen') as popen, \
+                mock.patch.object(rlm, 'sandbox_argv', return_value=['a']), \
+                mock.patch.object(s, '_request', side_effect=lambda *a: seen.append(s.proc)):
+            s._spawn()
+        self.assertEqual(seen, [popen.return_value])
+
     def test_no_context_no_load(self):
         popen, request = self.spawn(self.session(None))
         popen.assert_called_once()
