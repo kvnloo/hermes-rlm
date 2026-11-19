@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -293,8 +294,18 @@ class MatrixTests(unittest.TestCase):
         self.assertTrue(result["timed_out"])
         self.assertLess(result["wall_s"], 3)
         child = int(pidfile.read_text())
-        stat = Path(f"/proc/{child}/stat")
-        self.assertTrue(not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] == "Z")
+        # SIGKILL is asynchronous; poll briefly instead of racing the kernel.
+        deadline = time.monotonic() + 2
+        while not self.child_gone(child) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(self.child_gone(child))
+
+    @staticmethod
+    def child_gone(pid):
+        try:
+            return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z"
+        except OSError:
+            return True
 
 
 if __name__ == "__main__":
