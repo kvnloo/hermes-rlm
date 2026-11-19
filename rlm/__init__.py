@@ -18,6 +18,7 @@ import glob as _glob
 import json
 import math
 import os
+import secrets
 import select
 import shutil
 import subprocess
@@ -184,10 +185,13 @@ class Session:
         self.proc.stdin.flush()
 
     def _request(self, msg: dict, deadline: float) -> dict:
-        self._send(msg)
+        tok = secrets.token_hex(8)  # a done that doesn't echo it is stale or forged: the stream is off by one
+        self._send({**msg, "tok": tok})
         while True:
             reply = self._read(deadline)
             if reply["type"] == "done":
+                if reply.get("tok") != tok:
+                    raise RuntimeError("sandbox kernel sent an out-of-sequence reply")
                 return reply
             self._send(self._serve_llm(reply))
 

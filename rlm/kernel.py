@@ -77,7 +77,7 @@ def main():
         msg = _recv()
         if msg["type"] == "load":
             ns["context"] = msg["context"]
-            _send({"type": "done", "stdout": "", "error": None, "final": None})
+            _send({"type": "done", "tok": msg.get("tok"), "stdout": "", "error": None, "final": None})
             continue
         buf, _final = io.StringIO(), None
         old_out, old_err = sys.stdout, sys.stderr
@@ -89,7 +89,7 @@ def main():
             error = traceback.format_exc(limit=-3)
         finally:
             sys.stdout, sys.stderr = old_out, old_err
-        _send({"type": "done", "stdout": buf.getvalue(), "error": error, "final": _final})
+        _send({"type": "done", "tok": msg.get("tok"), "stdout": buf.getvalue(), "error": error, "final": _final})
 
 
 if __name__ == "__main__":
