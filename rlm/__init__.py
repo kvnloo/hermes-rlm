@@ -208,7 +208,7 @@ class Session:
                 text = text or ""  # no text / no usage must not sink the batch
                 if not isinstance(text, str):
                     raise TypeError(f"subcall returned {type(text).__name__}, not text")
-                usage = {k: usage[k] for k in ("prompt_tokens", "completion_tokens", "cost_usd")
+                usage = {k: usage[k] if k == "cost_usd" else int(usage[k]) for k in ("prompt_tokens", "completion_tokens", "cost_usd")
                          if isinstance(usage, dict) and isinstance(usage.get(k), (int, float))
                          and not isinstance(usage[k], bool)
                          and not (isinstance(usage[k], float) and not math.isfinite(usage[k]))
