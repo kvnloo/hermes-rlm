@@ -35,6 +35,10 @@ class SessionLogDirTests(unittest.TestCase):
             self.assertEqual(parent, d / "data" / "runs")
             self.assertTrue(made)
 
+    def test_existing_log_dir_is_reused_not_an_error(self):
+        d, parent, _ = self.session(log_dir=Path)
+        self.assertEqual(parent, d)
+
 
 if __name__ == "__main__":
     unittest.main()
