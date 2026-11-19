@@ -31,6 +31,18 @@ class ExecResultPins(unittest.TestCase):
         self.assertEqual([c['subcalls'] for c in cells], [2, 0])
         self.assertEqual(cells[1]['stdout_chars'], 3)
 
+    def test_cell_log_row_keeps_full_stdout_error_and_final(self):
+        self.s.lim = {**self.s.lim, 'max_output_chars': 5}
+        self.s.exec('print("x" * 20)')
+        self.s.exec('1/0')
+        self.s.exec('FINAL(7)')
+        cells = [json.loads(x) for x in self.s.log_path.read_text().splitlines() if '"cell"' in x]
+        self.assertEqual(cells[0]['stdout_chars'], 21)
+        self.assertIn('ZeroDivisionError', cells[1]['error'])
+        self.assertIsNone(cells[0]['error'])
+        self.assertEqual(cells[2]['final'], '7')
+        self.assertIsNone(cells[0]['final'])
+
 
 if __name__ == '__main__':
     unittest.main()
