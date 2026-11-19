@@ -19,3 +19,4 @@ class OutputTruncation(unittest.TestCase):
     def test_output_over_cap_is_cut_and_counts_the_rest(self):
         out = self.run_print(15)
         self.assertTrue(out.startswith('x' * 10 + '\n... [5 more chars truncated;'), out)
+        self.assertTrue(out.endswith('keep large values in variables and print summaries]'), out)

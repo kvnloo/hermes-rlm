@@ -2,6 +2,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 import rlm
 
 
@@ -28,6 +29,21 @@ class ExecRestartPins(unittest.TestCase):
 
     def test_kernel_crash_restarts_with_context(self):
         r = self.s.exec('import os; os._exit(1)')
+        self.assert_restarted(r, 'sandbox kernel exited')
+
+    def test_dead_kernel_between_cells_is_respawned_with_context(self):
+        self.s.proc.kill()
+        self.s.proc.wait()
+        r = self.s.exec('context')
+        self.assertIsNone(r['error'])
+        self.assertEqual(r['stdout'].strip(), "'corpus'")
+        self.assertIn('NameError', self.s.exec('keep')['error'])
+
+    def test_runtime_error_kills_the_live_kernel(self):
+        old = self.s.proc
+        with mock.patch.object(self.s, '_request', side_effect=RuntimeError('sandbox kernel exited')):
+            r = self.s.exec('pass')
+        self.assertIsNotNone(old.poll())
         self.assert_restarted(r, 'sandbox kernel exited')
 
 
