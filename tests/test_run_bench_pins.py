@@ -124,6 +124,30 @@ class Usage(unittest.TestCase):
             finally:
                 run_bench.HERMES_HOME = old
 
+    def test_hermes_usage_closes_its_sqlite_handle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seed = sqlite3.connect(Path(tmp) / "state.db")
+            seed.execute("create table sessions (id text, input_tokens int, output_tokens int, "
+                         "cache_read_tokens int, api_call_count int, tool_call_count int)")
+            seed.execute("insert into sessions values ('s1', 1, 2, 3, 4, 5)")
+            seed.commit()
+            seed.close()
+            opened, real = [], sqlite3.connect
+            def spy(*a, **k):
+                opened.append(real(*a, **k))
+                return opened[-1]
+            old_home, old_connect = run_bench.HERMES_HOME, run_bench.sqlite3.connect
+            run_bench.HERMES_HOME, run_bench.sqlite3.connect = Path(tmp), spy
+            try:
+                self.assertTrue(run_bench.hermes_usage("s1"))  # hit path
+                self.assertEqual(run_bench.hermes_usage("nope"), {})  # miss path
+            finally:
+                run_bench.HERMES_HOME, run_bench.sqlite3.connect = old_home, old_connect
+            self.assertEqual(len(opened), 2)
+            for c in opened:
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    c.execute("select 1")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,8 +48,11 @@ def score(q: dict, answer: str) -> bool:
 
 def hermes_usage(session_id: str) -> dict:
     db = sqlite3.connect(f"file:{HERMES_HOME / 'state.db'}?mode=ro", uri=True)
-    row = db.execute("select input_tokens, output_tokens, cache_read_tokens, api_call_count, "
-                     "tool_call_count from sessions where id=?", (session_id,)).fetchone()
+    try:
+        row = db.execute("select input_tokens, output_tokens, cache_read_tokens, api_call_count, "
+                         "tool_call_count from sessions where id=?", (session_id,)).fetchone()
+    finally:
+        db.close()
     keys = ("root_input_tokens", "root_output_tokens", "root_cache_read_tokens", "api_calls", "tool_calls")
     return dict(zip(keys, row)) if row else {}
 
