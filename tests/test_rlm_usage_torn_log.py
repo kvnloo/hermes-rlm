@@ -33,6 +33,12 @@ class RlmUsageTornLog(unittest.TestCase):
         self.assertEqual(self._usage(text),
                          {"subcalls": 1, "sub_prompt_tokens": 5, "sub_completion_tokens": 2, "cells": 1})
 
+    def test_null_token_counts_count_as_zero(self):
+        text = ('{"event": "subcall", "prompt_tokens": null, "completion_tokens": null}\n'
+                '{"event": "subcall", "prompt_tokens": 4, "completion_tokens": 1}\n')
+        self.assertEqual(self._usage(text),
+                         {"subcalls": 2, "sub_prompt_tokens": 4, "sub_completion_tokens": 1, "cells": 0})
+
 
 if __name__ == "__main__":
     unittest.main()

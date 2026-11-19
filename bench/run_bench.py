@@ -66,8 +66,8 @@ def rlm_usage(log: Path) -> dict:
                 continue
             if e.get("event") == "subcall":
                 out["subcalls"] += 1
-                out["sub_prompt_tokens"] += e.get("prompt_tokens", 0)
-                out["sub_completion_tokens"] += e.get("completion_tokens", 0)
+                out["sub_prompt_tokens"] += e.get("prompt_tokens") or 0
+                out["sub_completion_tokens"] += e.get("completion_tokens") or 0
             elif e.get("event") == "cell":
                 out["cells"] += 1
     return out
