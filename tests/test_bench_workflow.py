@@ -23,7 +23,7 @@ class BenchWorkflowTests(unittest.TestCase):
     def test_discover_step_requires_deps(self):
         step = re.search(r"(?m)^      - name: [^\n]*\n(?:(?!      - ).*\n)*?\s+run: python -m unittest discover -s bench$", self.text)
         self.assertIsNotNone(step)
-        self.assertRegex(step.group(0), r"BENCH_REQUIRE_DEPS: '1'")
+        self.assertRegex(step.group(0), r"(?m)^        env:\n          BENCH_REQUIRE_DEPS: '1'$")
 
 
 if __name__ == "__main__":
