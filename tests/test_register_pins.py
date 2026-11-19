@@ -47,7 +47,7 @@ class RegisterPins(unittest.TestCase):
 
     def test_manifest_provides_tools_match(self):
         text = (Path(rlm.__file__).parent / 'plugin.yaml').read_text()
-        listed = re.findall(r'(?m)^  - (\S+)$', text.split('provides_tools:')[1])
+        listed = re.findall(r'(?m)^  - (\S+)$', text.split('provides_tools:')[1].split('\n\n')[0])
         self.assertEqual(sorted(listed), sorted(self.ctx.tools))
 
     def test_aux_task_is_the_one_default_subcall_uses(self):
