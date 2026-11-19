@@ -77,6 +77,18 @@ class SyntheticLongContextTests(unittest.TestCase):
         sniah = {"sniah", "niah"}  # the filter --smallest-sniah applies
         self.assertFalse([t for t in loaded if re.sub(r"[^a-z]", "", t["family"].lower()) in sniah])
 
+    def test_generated_contexts_and_gold_are_pinned_byte_for_byte(self) -> None:
+        golden = {
+            "synthetic-aggregation": ("714", "713746b543fa33e95bdb6ba676f5927c094054051a2a18c52940e39e6a8166f7"),
+            "synthetic-multihop": ("S-DB410ED39AAE", "2ba23c335f0e093d1bf13dce6cb77080827d4d4136053bf5ccd1af28b36cdad5"),
+            "synthetic-needle": ("N-710E94334B83", "e345da656e994e58fa9b4f025366f00d264ff6e5eb6607938573b8011ee695fb"),
+        }
+        got = {
+            family: (task["gold"], hashlib.sha256(Path(task["context_path"]).read_bytes()).hexdigest())
+            for family, task in self.tasks(64).items()
+        }
+        self.assertEqual(got, golden)
+
     def test_same_manifest_and_context_bytes_on_repeat_generation(self) -> None:
         self.tasks()
         before = {
