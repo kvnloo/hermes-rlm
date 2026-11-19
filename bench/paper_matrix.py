@@ -533,8 +533,13 @@ def main(argv=None):
                 print(json.dumps({"row_key": key, "task_id": task["id"], "arm": arm, "rep": rep}))
                 continue
             row = run_one(task, arm, rep, args, protocol, ledger)
-            with args.out.open("a") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            with args.out.open("a+b") as f:
+                separator = b""
+                if f.tell():
+                    f.seek(-1, os.SEEK_END)
+                    if f.read(1) not in (b"\n", b"\r"):
+                        separator = b"\n"
+                f.write(separator + (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
                 f.flush()
                 os.fsync(f.fileno())
             print(json.dumps({k: row.get(k) for k in ("task_id", "arm", "rep", "valid", "score", "wall_s", "error")}), flush=True)
