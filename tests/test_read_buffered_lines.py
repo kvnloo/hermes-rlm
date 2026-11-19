@@ -106,6 +106,23 @@ class ReadOverRealPipe(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "malformed"):
             s._read(time.monotonic() + 3)
 
+    def test_newline_scan_resumes_after_already_scanned_bytes(self):
+        s, w = self.session()
+        starts = []
+
+        class Recording(bytearray):
+            def find(self, sub, start=0, *a):
+                starts.append((start, len(self)))
+                if len(starts) == 2:
+                    w.write(b"\n")  # the newline arrives only after the first chunk was seen
+                return super().find(sub, start, *a)
+
+        s._rbuf = Recording()
+        w.write(b'{"type": "done", "stdout": "x"}')
+        s._read(time.monotonic() + 3)
+        # each byte is scanned once: the last look starts after the chunk already scanned (no rescan of a 50 MB line)
+        self.assertEqual(starts, [(0, 0), (0, 31), (31, 32)])
+
     def test_clean_eof_is_kernel_exited(self):
         s, w = self.session()
         w.close()
