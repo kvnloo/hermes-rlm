@@ -28,6 +28,11 @@ class RlmUsageTornLog(unittest.TestCase):
         self.assertEqual(self._usage(text),
                          {"subcalls": 2, "sub_prompt_tokens": 6, "sub_completion_tokens": 3, "cells": 1})
 
+    def test_non_row_json_and_eventless_rows_are_skipped(self):
+        text = ('42\n[]\n{"x": 1}\n{"event": "subcall", "prompt_tokens": 5, "completion_tokens": 2}\n{"event": "cell"}\n')
+        self.assertEqual(self._usage(text),
+                         {"subcalls": 1, "sub_prompt_tokens": 5, "sub_completion_tokens": 2, "cells": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

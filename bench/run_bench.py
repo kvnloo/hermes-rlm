@@ -62,11 +62,13 @@ def rlm_usage(log: Path) -> dict:
                 e = json.loads(line)
             except json.JSONDecodeError:  # a partial row must not abort the bench
                 continue
-            if e["event"] == "subcall":
+            if not isinstance(e, dict):  # valid JSON that is not a row (e.g. a bare number)
+                continue
+            if e.get("event") == "subcall":
                 out["subcalls"] += 1
                 out["sub_prompt_tokens"] += e.get("prompt_tokens", 0)
                 out["sub_completion_tokens"] += e.get("completion_tokens", 0)
-            elif e["event"] == "cell":
+            elif e.get("event") == "cell":
                 out["cells"] += 1
     return out
 
