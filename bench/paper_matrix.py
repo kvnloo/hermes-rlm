@@ -44,7 +44,9 @@ def json_hash(value):
 
 def load_tasks(manifest):
     tasks, seen = [], set()
-    for n, line in enumerate(manifest.read_text().splitlines(), 1):
+    with manifest.open(encoding="utf-8") as stream:
+        lines = stream.readlines()
+    for n, line in enumerate(lines, 1):
         if not line.strip():
             continue
         task = json.loads(line)
@@ -94,7 +96,8 @@ def row_key(task, arm, rep, protocol):
 def completed(out):
     done = set()
     if out.exists():
-        lines = out.read_text().splitlines()
+        with out.open(encoding="utf-8") as stream:
+            lines = stream.readlines()
         for i, line in enumerate(lines):
             try:
                 done.add(json.loads(line)["row_key"])
