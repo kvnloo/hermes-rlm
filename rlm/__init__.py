@@ -193,9 +193,11 @@ class Session:
                     "split the slice into smaller chunks"}
         try:
             max_tokens = min(int(req.get("max_tokens") or lim["subcall_max_tokens"]), 32_000)
+            if max_tokens < 1:
+                raise ValueError("below 1")
         except (TypeError, ValueError, OverflowError) as exc:  # model code controls this value
             return {"type": "llm_result", "id": req["id"], "error":
-                    f"max_tokens must be an integer ({type(exc).__name__}); omit it or pass a number"}
+                    f"max_tokens must be a positive integer ({type(exc).__name__}); omit it or pass a number"}
         self.stats["subcalls"] += len(prompts)
 
         def one(prompt: str):

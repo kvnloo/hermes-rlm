@@ -1,4 +1,4 @@
-"""A non-numeric max_tokens from model code is refused as an llm_result error, not raised or charged."""
+"""A non-numeric or non-positive max_tokens from model code is refused as an llm_result error, not raised or charged."""
 import sys
 import tempfile
 import unittest
@@ -10,7 +10,7 @@ from rlm import Session  # noqa: E402
 
 class ServeLlmBadMaxTokens(unittest.TestCase):
     def test_bad_max_tokens_is_refused_uncharged(self):
-        for bad in ("abc", [1], float("inf")):
+        for bad in ("abc", [1], float("inf"), -5, "-1", 0.5):
             with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
                 calls = []
                 s = Session("t", subcall=lambda p, m: calls.append(m) or ("ok", {}), log_dir=Path(d))
@@ -25,7 +25,8 @@ class ServeLlmBadMaxTokens(unittest.TestCase):
             s = Session("t", subcall=lambda p, m: calls.append(m) or ("ok", {}), log_dir=Path(d))
             s._serve_llm({"id": 1, "prompts": ["a"], "max_tokens": "50"})
             s._serve_llm({"id": 2, "prompts": ["a"], "max_tokens": 10**9})
-        self.assertEqual(calls, [50, 32_000])
+            s._serve_llm({"id": 3, "prompts": ["a"], "max_tokens": 1})
+        self.assertEqual(calls, [50, 32_000, 1])
 
 
 if __name__ == "__main__":
