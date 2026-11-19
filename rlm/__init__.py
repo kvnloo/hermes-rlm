@@ -165,7 +165,10 @@ class Session:
                 line = self.proc.stdout.readline()
                 if not line:
                     raise RuntimeError("sandbox kernel exited")
-                return json.loads(line)
+                try:
+                    return json.loads(line)
+                except ValueError:  # torn or junk line: the protocol stream is unusable
+                    raise RuntimeError("sandbox kernel sent a malformed protocol line") from None
 
     def _send(self, msg: dict) -> None:
         self.proc.stdin.write(json.dumps(msg) + "\n")
