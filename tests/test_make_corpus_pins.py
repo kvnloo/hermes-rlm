@@ -51,6 +51,21 @@ class MakeCorpusPins(unittest.TestCase):
         self.assertEqual(needles[0][0], "u999")
         self.assertGreaterEqual(self.rows.index(needles[0]), len(self.rows) // 3)
 
+    def test_needle_position_range_and_endpoints(self):
+        lo, hi = set(), set()
+        for seed in range(200):
+            text, _, meta = make_corpus.build(175, seed)
+            lines = text.splitlines()
+            n = len(lines)
+            self.assertEqual(n, meta["records"])
+            pos = [i for i, l in enumerate(lines) if "vault access code" in l]
+            self.assertEqual(len(pos), 1)
+            self.assertTrue(n // 3 <= pos[0] <= n - 1, (seed, n, pos))
+            lo.add(pos[0] - n // 3)
+            hi.add(pos[0] - (n - 1))
+        self.assertIn(0, lo)  # lower bound n//3 is reachable
+        self.assertIn(0, hi)  # last record is reachable
+
     def test_every_other_record_is_a_known_category(self):
         self.assertTrue(all(r[1] for r in self.rows))
         self.assertEqual(sum(1 for r in self.rows if r[1] == "needle"), 1)
