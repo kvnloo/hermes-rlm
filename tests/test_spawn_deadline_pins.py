@@ -1,4 +1,4 @@
-"""Pin Session._spawn: the context load gets a 120s deadline from now, and only when a context exists."""
+"""Pin Session._spawn: Popen argv/pipes/mode, the context load gets a 120s deadline from now, and only when a context exists."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +17,7 @@ class SpawnDeadlinePins(unittest.TestCase):
     def spawn(self, s):
         clock = mock.Mock(monotonic=mock.Mock(return_value=1000.0))
         with mock.patch.object(rlm, 'time', clock), \
+                mock.patch.object(rlm, 'sandbox_argv', return_value=['argv', 'x']), \
                 mock.patch.object(rlm.subprocess, 'Popen') as popen, \
                 mock.patch.object(s, '_request') as request:
             s._spawn()
@@ -26,6 +27,13 @@ class SpawnDeadlinePins(unittest.TestCase):
         popen, request = self.spawn(self.session({'k': 'v'}))
         popen.assert_called_once()
         request.assert_called_once_with({'type': 'load', 'context': {'k': 'v'}}, 1120.0)
+
+    def test_popen_gets_sandbox_argv_pipes_devnull_stderr_and_line_text_mode(self):
+        s = self.session(None)
+        popen, _ = self.spawn(s)
+        popen.assert_called_once_with(['argv', 'x'], stdin=rlm.subprocess.PIPE, stdout=rlm.subprocess.PIPE,
+                                      stderr=rlm.subprocess.DEVNULL, text=True, bufsize=1)
+        self.assertIs(s.proc, popen.return_value)
 
     def test_falsy_but_set_context_still_loads(self):
         _, request = self.spawn(self.session(''))
