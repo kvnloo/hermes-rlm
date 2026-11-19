@@ -503,6 +503,8 @@ def main(argv=None):
     if not args.scorer.is_file():
         raise ValueError("scorer must be a regular file")
     scorer_sha256 = digest(args.scorer)
+    soul = args.home_template / "SOUL.md"
+    soul_sha256 = digest(soul) if soul.is_file() else None
     args.ops_dir.mkdir(parents=True, exist_ok=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # One controller per output; the request ledger additionally serializes provider reservations.
@@ -532,6 +534,8 @@ def main(argv=None):
                         harness_sha256=digest(Path(__file__)), proxy_sha256=digest(HERE / "paper_proxy.py"),
                         hermes_client_sha256=digest(HERE / "hermes_client.py"),
                         scorer_sha256=scorer_sha256)
+        if soul_sha256 is not None:
+            protocol["home_soul_sha256"] = soul_sha256
         done = completed(args.out)
         ledger = Ledger(args.ops_dir / "request-ledger.sqlite3", args.provider_cap)
         for task, arm, rep in schedule(tasks, arms, args.repeats):
