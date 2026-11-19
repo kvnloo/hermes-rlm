@@ -58,7 +58,10 @@ def rlm_usage(log: Path) -> dict:
     out = {"subcalls": 0, "sub_prompt_tokens": 0, "sub_completion_tokens": 0, "cells": 0}
     if log.exists():
         for line in log.read_text().splitlines():
-            e = json.loads(line)
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:  # a partial row must not abort the bench
+                continue
             if e["event"] == "subcall":
                 out["subcalls"] += 1
                 out["sub_prompt_tokens"] += e.get("prompt_tokens", 0)
