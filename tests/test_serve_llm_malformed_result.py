@@ -45,6 +45,15 @@ class ServeLlmMalformedResult(unittest.TestCase):
         for k in ("prompt_tokens", "completion_tokens", "cost_usd"):
             self.assertNotIn(k, rows[0])
 
+    def test_non_finite_usage_never_reaches_stats_or_log(self):
+        for bad in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=bad):
+                r, stats, rows = serve(("txt", {"prompt_tokens": bad, "completion_tokens": bad, "cost_usd": bad}))
+                self.assertEqual(r["results"], ["txt"])
+                self.assertEqual((stats["prompt_tokens"], stats["completion_tokens"]), (0, 0))
+                for k in ("prompt_tokens", "completion_tokens", "cost_usd"):
+                    self.assertNotIn(k, rows[0])
+
     def test_non_text_result_becomes_error_slice(self):
         r, _, _ = serve((5, {"prompt_tokens": 1}))
         self.assertTrue(r["results"][0].startswith("[llm_query error: TypeError"))
