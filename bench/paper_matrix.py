@@ -500,6 +500,9 @@ def main(argv=None):
         raise ValueError("budgets and repeats must be positive")
     if args.limit_tasks is not None and args.limit_tasks < 1:
         raise ValueError("--limit-tasks must be positive")
+    if not args.scorer.is_file():
+        raise ValueError("scorer must be a regular file")
+    scorer_sha256 = digest(args.scorer)
     args.ops_dir.mkdir(parents=True, exist_ok=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # One controller per output; the request ledger additionally serializes provider reservations.
@@ -528,7 +531,7 @@ def main(argv=None):
         protocol.update(source_shas=shas, plugin_sha256=plugin_hash,
                         harness_sha256=digest(Path(__file__)), proxy_sha256=digest(HERE / "paper_proxy.py"),
                         hermes_client_sha256=digest(HERE / "hermes_client.py"),
-                        scorer_sha256=digest(args.scorer) if args.scorer.exists() else None)
+                        scorer_sha256=scorer_sha256)
         done = completed(args.out)
         ledger = Ledger(args.ops_dir / "request-ledger.sqlite3", args.provider_cap)
         for task, arm, rep in schedule(tasks, arms, args.repeats):
