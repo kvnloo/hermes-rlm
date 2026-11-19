@@ -44,7 +44,7 @@ class FakeAgent:
         return self.closed
 
 
-def load(closed, resp):
+def load(closed, resp, name="nano_client_under_test"):
     spawned = {}
     holder = {}
 
@@ -59,7 +59,7 @@ def load(closed, resp):
     acp.spawn_agent_process = spawn
     acp.text_block = lambda t: {"text": t}
     with mock.patch.dict(sys.modules, {"acp": acp}):
-        spec = importlib.util.spec_from_file_location("nano_client_under_test", PATH)
+        spec = importlib.util.spec_from_file_location(name, PATH)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
     return mod, spawned, holder
@@ -140,6 +140,24 @@ class NanoClientPins(unittest.TestCase):
         closed = types.SimpleNamespace(field_meta={"other": 1})
         resp = types.SimpleNamespace(_meta={META: {"from": "resp"}})
         self.assertEqual(run(closed, resp)[0]["snapshot"], {"from": "resp"})
+
+    def test_session_id_is_bench_plus_truncated_epoch_seconds(self):
+        mod, _, holder = load(None, None)
+        mod.time = types.SimpleNamespace(monotonic=lambda: 0.0, time=lambda: 5.9)
+        with mock.patch.dict(os.environ, ENV, clear=True), contextlib.redirect_stdout(io.StringIO()):
+            asyncio.run(mod.main("P"))
+        rt = holder["agent"].calls[1][1]["ai.prime.rlm/runtime-v1"]
+        self.assertEqual(rt["session_id"], "bench-5")
+
+    def test_script_entry_prompts_with_first_cli_arg(self):
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(sys, "argv", ["nano_client.py", "ARG1", "X"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            _, _, holder = load(None, None, name="__main__")
+        self.assertEqual(holder["agent"].calls[2], ("prompt", "S1", [{"text": "ARG1"}]))
+
+    def test_field_meta_wins_over_underscore_meta_on_same_response(self):
+        closed = types.SimpleNamespace(field_meta={META: {"from": "field_meta"}}, _meta={META: {"from": "_meta"}})
+        self.assertEqual(run(closed, None)[0]["snapshot"], {"from": "field_meta"})
 
     def test_non_dict_meta_is_ignored(self):
         closed = types.SimpleNamespace(field_meta="junk")
