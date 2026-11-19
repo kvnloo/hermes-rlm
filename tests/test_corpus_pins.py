@@ -28,6 +28,11 @@ class CorpusPins(unittest.TestCase):
 
 
 class TaskPathPins(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
     def host(self, calls):
         mod = types.SimpleNamespace(_resolve_base_dir=lambda t: calls.append(t) or "/ws")
         return mock.patch.dict(sys.modules, {"tools": types.SimpleNamespace(), "tools.file_tools_paths": mod})
@@ -38,6 +43,15 @@ class TaskPathPins(unittest.TestCase):
             self.assertEqual(rlm._task_path("a/b", "t1"), "/ws/a/b")
             self.assertEqual(rlm._task_path("a", ""), "/ws/a")
         self.assertEqual(calls, ["t1", "default"])
+
+    def test_load_corpus_passes_task_id_to_workspace_lookup(self):
+        calls = []
+        (self.root / "f.txt").write_text("x")
+        mod = types.SimpleNamespace(_resolve_base_dir=lambda t: calls.append(t) or str(self.root))
+        with mock.patch.dict(sys.modules, {"tools": types.SimpleNamespace(), "tools.file_tools_paths": mod}):
+            self.assertEqual(rlm.load_corpus("f.txt", 10, "t9")[0], {"f.txt": "x"})
+            rlm.load_corpus("f.txt", 10)
+        self.assertEqual(calls, ["t9", "default"])
 
     def test_relative_path_without_host_is_made_absolute(self):
         with mock.patch.dict(sys.modules, {"tools.file_tools_paths": None}):
