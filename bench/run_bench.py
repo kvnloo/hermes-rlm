@@ -54,6 +54,12 @@ def hermes_usage(session_id: str) -> dict:
     return dict(zip(keys, row)) if row else {}
 
 
+def _tokens(v) -> int:
+    """A log token count: finite, non-negative, whole, non-bool numbers only (the _serve_llm writer's rule)."""
+    ok = isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 and v % 1 == 0
+    return int(v) if ok else 0
+
+
 def rlm_usage(log: Path) -> dict:
     out = {"subcalls": 0, "sub_prompt_tokens": 0, "sub_completion_tokens": 0, "cells": 0}
     if log.exists():
@@ -66,8 +72,8 @@ def rlm_usage(log: Path) -> dict:
                 continue
             if e.get("event") == "subcall":
                 out["subcalls"] += 1
-                out["sub_prompt_tokens"] += e.get("prompt_tokens") or 0
-                out["sub_completion_tokens"] += e.get("completion_tokens") or 0
+                out["sub_prompt_tokens"] += _tokens(e.get("prompt_tokens"))
+                out["sub_completion_tokens"] += _tokens(e.get("completion_tokens"))
             elif e.get("event") == "cell":
                 out["cells"] += 1
     return out

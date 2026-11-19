@@ -46,6 +46,21 @@ class RlmUsageTornLog(unittest.TestCase):
         self.assertEqual(self._usage(text),
                          {"subcalls": 2, "sub_prompt_tokens": 4, "sub_completion_tokens": 1, "cells": 0})
 
+    def test_non_whole_or_non_numeric_token_counts_are_dropped_like_the_writer_does(self):
+        # mirrors the _serve_llm sanitiser: only finite, non-negative, whole, non-bool numbers count
+        good = '{"event": "subcall", "prompt_tokens": 4, "completion_tokens": 1}\n'
+        for bad in ('"12"', '[1]', '{"a": 1}', 'true', '-3', '2.5', 'NaN', 'Infinity', '-Infinity'):
+            with self.subTest(bad=bad):
+                row = '{"event": "subcall", "prompt_tokens": %s, "completion_tokens": %s}\n' % (bad, bad)
+                self.assertEqual(self._usage(row + good),
+                                 {"subcalls": 2, "sub_prompt_tokens": 4, "sub_completion_tokens": 1, "cells": 0})
+
+    def test_whole_valued_float_token_count_still_counts_as_int(self):
+        got = self._usage('{"event": "subcall", "prompt_tokens": 7.0, "completion_tokens": 3.0}\n')
+        self.assertEqual(got, {"subcalls": 1, "sub_prompt_tokens": 7, "sub_completion_tokens": 3, "cells": 0})
+        self.assertIsInstance(got["sub_prompt_tokens"], int)
+        self.assertIsInstance(got["sub_completion_tokens"], int)
+
 
 if __name__ == "__main__":
     unittest.main()
