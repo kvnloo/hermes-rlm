@@ -37,6 +37,14 @@ class ServeLlmMalformedResult(unittest.TestCase):
         self.assertEqual((rows[0]["prompt_tokens"], rows[0]["cost_usd"]), (3, 0.5))
         self.assertNotEqual(rows[0]["ms"], 99)
 
+    def test_bool_usage_is_not_a_number(self):
+        # bool is an int subclass: True would be charged as 1 token / logged as `true`
+        r, stats, rows = serve(("txt", {"prompt_tokens": True, "completion_tokens": False, "cost_usd": True}))
+        self.assertEqual(r["results"], ["txt"])
+        self.assertEqual((stats["prompt_tokens"], stats["completion_tokens"]), (0, 0))
+        for k in ("prompt_tokens", "completion_tokens", "cost_usd"):
+            self.assertNotIn(k, rows[0])
+
     def test_non_text_result_becomes_error_slice(self):
         r, _, _ = serve((5, {"prompt_tokens": 1}))
         self.assertTrue(r["results"][0].startswith("[llm_query error: TypeError"))
