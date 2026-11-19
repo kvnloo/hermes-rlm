@@ -1,4 +1,5 @@
 """Pin Session._serve_llm success path: result order, failed-slice isolation, stats accumulation, subcall log usage fields."""
+import contextvars
 import json
 import tempfile
 import threading
@@ -38,6 +39,20 @@ class ServeLlmSuccessPins(unittest.TestCase):
         self.s.lim['concurrency'] = 2
         reply = self.s._serve_llm({'id': 1, 'prompts': ['first', 'second']})
         self.assertEqual(reply['results'], ['first', 'second'])
+
+    def test_any_exception_type_is_isolated_to_its_slice(self):
+        def sub(prompt, max_tokens):
+            raise KeyError('k') if prompt == 'x' else RuntimeError('r')
+        self.s.subcall = sub
+        reply = self.s._serve_llm({'id': 1, 'prompts': ['x', 'y']})
+        self.assertEqual(reply['results'], ["[llm_query error: KeyError: 'k']", '[llm_query error: RuntimeError: r]'])
+
+    def test_workers_inherit_callers_contextvars(self):
+        var = contextvars.ContextVar('profile', default='unset')
+        var.set('scoped')
+        self.s.subcall = lambda prompt, max_tokens: (var.get(), {})
+        self.s.lim['concurrency'] = 2
+        self.assertEqual(self.s._serve_llm({'id': 1, 'prompts': ['a', 'b']})['results'], ['scoped', 'scoped'])
 
     def test_stats_accumulate_per_prompt_and_failed_slice_adds_no_tokens(self):
         self.s.stats.update(subcalls=1, subcall_prompt_chars=10, prompt_tokens=5, completion_tokens=7)
