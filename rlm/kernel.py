@@ -16,6 +16,7 @@ import traceback
 
 _proto_out = os.fdopen(os.dup(1), "w", buffering=1)
 _proto_in = sys.stdin
+os.dup2(os.open(os.devnull, os.O_WRONLY), 1)  # model code writing to fd 1 must not corrupt the protocol
 _next_id = 0
 _final = None
 
