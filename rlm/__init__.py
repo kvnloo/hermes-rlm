@@ -75,6 +75,8 @@ def default_subcall(prompt: str, max_tokens: int) -> tuple[str, dict]:
     r = _CTX.llm.complete(messages=[{"role": "user", "content": prompt}], max_tokens=max_tokens,
                           task="rlm_subcall", purpose="rlm.subcall")
     u = r.usage
+    if u is None:  # host lane gave text but no usage: keep the text
+        return r.text or "", {}
     return r.text or "", {"prompt_tokens": u.input_tokens, "completion_tokens": u.output_tokens,
                           "cost_usd": u.cost_usd}
 
