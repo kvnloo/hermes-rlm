@@ -51,6 +51,13 @@ class LoadCorpusTests(unittest.TestCase):
         (self.root / "u.txt").write_text("\u00e9\u00e9\u00e9", encoding="utf-8")  # 3 chars, 6 bytes
         self.assertEqual(rlm.load_corpus(str(self.root / "u.txt"), 3)[0], {"u.txt": "\u00e9\u00e9\u00e9"})
 
+    def test_binary_sniff_window_is_first_8192_bytes(self):
+        for name, at in (("in.dat", 8191), ("out.txt", 8192)):
+            (self.root / name).write_bytes(b"a" * at + b"\0")
+        corpus, skipped = rlm.load_corpus([str(self.root / n) for n in ("in.dat", "out.txt")], 10_000_000)
+        self.assertEqual(list(corpus), ["out.txt"])
+        self.assertEqual(skipped, 1)
+
     def test_invalid_utf8_is_replaced_not_raised(self):
         (self.root / "bad.txt").write_bytes(b"x\xffy")
         corpus, _ = rlm.load_corpus(str(self.root / "bad.txt"), 1000)
