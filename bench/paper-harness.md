@@ -44,7 +44,7 @@ Each run gets a new `input/` working directory containing only an unlabeled copy
 
 `paper_tasks.score_task(task, answer)` supplies deterministic grading. Numeric returns become `{"score": value}`. A dictionary return must contain `score`. The score must be representable as a finite number; a bad score makes the row invalid, not a zero-score result. The dataset worker defines exact parsing, OOLONG numeric grades, CodeQA choices, and Pairs F1. The harness never inserts an LLM judge or substitutes binary correctness for a graded score.
 
-`size_tokens` is the dataset label, not a measured root tokenizer count. Base truncation is explicitly character-based, controlled by `--base-context-chars`. It is not presented as exact token-window replication. The chosen cap must leave room for the question and output within the selected provider's model window.
+`size_tokens` is the dataset label, not a measured root tokenizer count. Base truncation decodes the context as UTF-8 without changing line endings and counts characters, controlled by `--base-context-chars`. It is not presented as exact token-window replication. The chosen cap must leave room for the question and output within the selected provider's model window.
 
 `--disable-thinking` sends `chat_template_kwargs.enable_thinking=false` to every NIM request across every arm, including root, child and base requests. The flag is part of each row's protocol. Omitting it preserves provider defaults. This is a study choice, not the paper's reasoning configuration.
 

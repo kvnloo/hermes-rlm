@@ -312,7 +312,8 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     upstream_timeout=min(args.timeout, 120),
                     disable_thinking=args.disable_thinking) as router:
             if arm == "base-truncated":
-                text = (cwd / "context.txt").read_text()
+                with (cwd / "context.txt").open(encoding="utf-8", newline="") as context:
+                    text = context.read()
                 # Declared UTF-8 character truncation, not invented tokenizer counts.
                 truncated = text[:args.base_context_chars]
                 body = {"model": args.root_model, "messages": [{"role": "user", "content":

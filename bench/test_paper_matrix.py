@@ -115,6 +115,34 @@ class MatrixTests(unittest.TestCase):
         self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'base-truncated'))
         self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'nano-rlm'))
 
+    def test_base_truncation_keeps_utf8_literally_before_character_cap(self):
+        context = self.root / "context.txt"
+        source = "é\r\n猫\r☀\n"
+        context.write_bytes(source.encode("utf-8"))
+        task = dict(self.task, context_path=str(context), context_sha256=matrix.digest(context),
+                    task_sha256="hash")
+        args = SimpleNamespace(ops_dir=self.root / "ops", root_model=ROOT, sub_model=SUB,
+                               timeout=10, disable_thinking=False, max_tokens=64,
+                               base_context_chars=4, scorer=matrix.HERE / "paper_tasks.py")
+        bodies = []
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = {"Content-Type": "application/json"}
+
+        def upstream(request, **kwargs):
+            bodies.append(json.loads(request.data))
+            return Response(b'{"choices":[{"message":{"content":"ANSWER: 73521"}}]}')
+
+        with patch.dict(os.environ, NVIDIA_API_KEY="not-written"), \
+             patch("urllib.request.urlopen", side_effect=upstream):
+            row = matrix.run_one(task, "base-truncated", 0, args, {}, self.ledger)
+        self.assertTrue(row["valid"], row.get("error"))
+        self.assertEqual(bodies[0]["messages"][0]["content"],
+                         "é\r\n猫\n\n" + matrix.task_prompt(task, "base-truncated"))
+        self.assertEqual(row["truncation"], {"kind": "head_characters", "chars": 4,
+                                            "original_chars": len(source), "truncated": True})
+
     def test_no_raw_context_or_gold_in_rlm_prompt(self):
         for arm in matrix.ARMS[1:]:
             prompt = matrix.task_prompt(self.task, arm)
