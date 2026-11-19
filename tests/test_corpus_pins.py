@@ -26,6 +26,18 @@ class CorpusPins(unittest.TestCase):
             (self.root / f"{n}.txt").write_text(n)
         self.assertEqual(list(rlm.load_corpus(str(self.root), 10)[0]), ["a.txt", "b.txt", "c.txt"])
 
+    def test_glob_hits_are_sorted(self):
+        for n in ("b", "a"):
+            (self.root / f"{n}.txt").write_text(n)
+        hits = [str(self.root / "b.txt"), str(self.root / "a.txt")]
+        with mock.patch.object(rlm._glob, "glob", return_value=hits):
+            self.assertEqual(list(rlm.load_corpus("*.txt", 10)[0]), ["a.txt", "b.txt"])
+
+    def test_missing_path_beside_existing_file_raises_before_budget(self):
+        (self.root / "f.txt").write_text("hello")
+        with self.assertRaises(FileNotFoundError):
+            rlm.load_corpus([str(self.root / "f.txt"), str(self.root / "nope")], 1)
+
 
 class TaskPathPins(unittest.TestCase):
     def setUp(self):
