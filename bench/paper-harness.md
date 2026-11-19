@@ -16,7 +16,7 @@ bws-env-exec --scope hermes-jev-provider-bench -- nice -n 10 python3 bench/paper
   --smallest-sniah --repeats 1 --timeout 150 --max-turns 8 --max-subcalls 4
 ```
 
-`--nano-python` defaults to `$NANO_SOURCE/.venv/bin/python`. A broader run omits `--smallest-sniah` and uses the default three repeats. `--dry-run` prints pending row identities without inference. `--task-ids` and `--limit-tasks` bound selection. `--arms` accepts a comma-separated subset of the names below.
+`--nano-python` defaults to `$NANO_SOURCE/.venv/bin/python`. A broader run omits `--smallest-sniah` and uses the default three repeats. `--dry-run` prints pending row identities without inference. `--task-ids` and `--limit-tasks` bound selection. Every comma-separated ID passed to `--task-ids` must appear in the manifest; a typo fails rather than scheduling only the matching subset. `--arms` accepts a comma-separated subset of the names below.
 
 ## Arms
 

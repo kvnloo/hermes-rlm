@@ -500,7 +500,11 @@ def main(argv=None):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         tasks = load_tasks(args.manifest)
         if args.task_ids:
-            tasks = [t for t in tasks if t["id"] in args.task_ids.split(",")]
+            requested = set(args.task_ids.split(","))
+            unknown = requested - {t["id"] for t in tasks}
+            if unknown:
+                raise ValueError(f"unknown --task-ids: {', '.join(sorted(unknown))}")
+            tasks = [t for t in tasks if t["id"] in requested]
         if args.smallest_sniah:
             tasks = [t for t in tasks if re.sub(r"[^a-z]", "", t["family"].lower()) in {"sniah", "niah"}]
             tasks = sorted(tasks, key=lambda t: (t["size_tokens"], t["id"]))[:1]

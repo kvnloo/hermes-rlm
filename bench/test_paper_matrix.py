@@ -239,6 +239,26 @@ class MatrixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"manifest line 1: context_sha256 .* context bytes"):
             matrix.load_tasks(manifest)
 
+    def test_dry_run_rejects_partial_unknown_task_selection(self):
+        (self.root / "context.txt").write_text("context", encoding="utf-8")
+        manifest = self.root / "manifest.jsonl"
+        manifest.write_text(json.dumps(self.task) + "\n", encoding="utf-8")
+        args = [str(manifest), str(self.root / "out.jsonl"),
+                "--ops-dir", str(self.root / "ops"), "--home-template", str(self.root),
+                "--released-source", str(self.root), "--released-python", sys.executable,
+                "--fork-source", str(self.root), "--fork-python", sys.executable,
+                "--nano-source", str(self.root), "--dry-run", "--arms", "base-truncated",
+                "--repeats", "1"]
+        stream = io.StringIO()
+        with patch.object(matrix, "source_sha", return_value="fixture"), \
+             patch.object(matrix, "run_one") as run, patch("sys.stdout", stream):
+            with self.assertRaisesRegex(ValueError, "unknown --task-ids: missing"):
+                matrix.main(args + ["--task-ids", "tiny,missing"])
+            self.assertEqual(stream.getvalue(), "")
+            self.assertEqual(matrix.main(args + ["--task-ids", "tiny"]), 0)
+            run.assert_not_called()
+        self.assertEqual(json.loads(stream.getvalue())["task_id"], "tiny")
+
     def test_hashed_logs_count_attempts_once_not_cell_totals(self):
         logs = self.root / "logs"
         logs.mkdir()
