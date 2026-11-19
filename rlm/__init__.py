@@ -106,6 +106,7 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
                 files.append(p)
             else:
                 raise FileNotFoundError(raw)
+    files = list(dict.fromkeys(files))  # `dir/**` matches the dir and the files under it: count each once
     common = os.path.commonpath([str(f.parent) for f in files]) if files else ""
     corpus, total, skipped = {}, 0, 0
     for f in files:
