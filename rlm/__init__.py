@@ -211,7 +211,8 @@ class Session:
                 usage = {k: usage[k] for k in ("prompt_tokens", "completion_tokens", "cost_usd")
                          if isinstance(usage, dict) and isinstance(usage.get(k), (int, float))
                          and not isinstance(usage[k], bool)
-                         and not (isinstance(usage[k], float) and not math.isfinite(usage[k]))}  # only finite numbers reach the log row and stats
+                         and not (isinstance(usage[k], float) and not math.isfinite(usage[k]))
+                         and usage[k] >= 0}  # only finite non-negative numbers reach the log row and stats
             except Exception as exc:  # one failed slice must not sink the batch
                 text, usage = f"[llm_query error: {type(exc).__name__}: {exc}]", {}
             self.log("subcall", prompt_chars=len(prompt), output_chars=len(text),
