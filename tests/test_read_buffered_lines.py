@@ -100,6 +100,12 @@ class ReadOverRealPipe(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "malformed"):
             s._read(time.monotonic() + 3)
 
+    def test_invalid_utf8_inside_a_well_shaped_line_is_malformed(self):
+        s, w = self.session()
+        w.write(b'{"type": "done", "stdout": "\xff"}\n')  # valid JSON shape; only the bytes are bad
+        with self.assertRaisesRegex(RuntimeError, "malformed"):
+            s._read(time.monotonic() + 3)
+
     def test_clean_eof_is_kernel_exited(self):
         s, w = self.session()
         w.close()
