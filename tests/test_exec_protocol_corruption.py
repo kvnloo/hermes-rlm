@@ -18,6 +18,7 @@ FAKES = {
     "llm_string_prompts": "import sys,time; sys.stdin.readline(); print('{\"type\":\"llm\",\"id\":1,\"prompts\":\"ab\"}', flush=True); time.sleep(60)",
     "llm_non_str_prompt": "import sys,time; sys.stdin.readline(); print('{\"type\":\"llm\",\"id\":1,\"prompts\":[1]}', flush=True); time.sleep(60)",
     "done_non_str_stdout": "import sys,time; sys.stdin.readline(); print('{\"type\":\"done\",\"stdout\":5}', flush=True); time.sleep(60)",
+    "invalid_utf8_line": "import sys,time; sys.stdin.readline(); sys.stdout.buffer.write(b'\\xff\\xfe\\n'); sys.stdout.flush(); time.sleep(60)",
     "llm_without_id": "import sys,time; sys.stdin.readline(); print('{\"type\":\"llm\",\"prompts\":[\"x\"]}', flush=True); time.sleep(60)",
 }
 

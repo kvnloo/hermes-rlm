@@ -162,10 +162,10 @@ class Session:
                 raise TimeoutError
             ready, _, _ = select.select([self.proc.stdout], [], [], min(left, 1.0))
             if ready:
-                line = self.proc.stdout.readline()
-                if not line:
-                    raise RuntimeError("sandbox kernel exited")
                 try:
+                    line = self.proc.stdout.readline()  # invalid UTF-8 raises UnicodeDecodeError (a ValueError)
+                    if not line:
+                        raise RuntimeError("sandbox kernel exited")
                     msg = json.loads(line)
                     if not (isinstance(msg, dict) and ((msg.get("type") == "done" and isinstance(msg.get("stdout") or "", str)) or (
                             msg.get("type") == "llm" and "id" in msg and isinstance(msg.get("prompts"), list)
