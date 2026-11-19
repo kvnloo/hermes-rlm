@@ -97,6 +97,7 @@ def audit_row(row, task, ops_dir):
         return result
     if arm not in HERMES_ARMS | {"nano-rlm"}:
         reasons.append("unknown_arm")
+        result["audit_adherence"] = "unknown"
     if row.get("valid") is not True:
         reasons.append("collection_invalid")
 
