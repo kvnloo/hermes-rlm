@@ -261,13 +261,14 @@ class TaskBuilder:
             size_basis="source nominal; root tokenizer count not measured", **metadata):
         path = self.out / "contexts" / family / (context_key or task_id) / "context.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists() or digest(path.read_text(encoding="utf-8")) != digest(text):
-            path.write_text(text, encoding="utf-8")
+        payload = text.encode("utf-8")
+        if not path.exists() or path.read_bytes() != payload:
+            path.write_bytes(payload)
         task = dict(id=task_id, family=family, size_tokens=size, context_path=str(path),
                     question=question, gold=gold, scoring=scoring,
                     metadata=dict(source=source, source_revision=revision, source_id=source_id,
                                   source_context_sha256=digest(text if source_text is None else source_text),
-                                  context_sha256=digest(text), context_bytes=len(text.encode()),
+                                  context_sha256=hashlib.sha256(payload).hexdigest(), context_bytes=len(payload),
                                   size_basis=size_basis, **metadata))
         self.tasks.append(task)
         return task

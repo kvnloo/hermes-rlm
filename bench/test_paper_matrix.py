@@ -179,6 +179,18 @@ class MatrixTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             matrix.load_tasks(manifest)
 
+    def test_manifest_checks_declared_context_bytes_before_scheduling(self):
+        context = self.root / "context.txt"
+        context.write_bytes(b"first\r\n")
+        other_metadata = {"context_sha256": matrix.digest(context)}
+        manifest = self.root / "tasks.jsonl"
+        manifest.write_text(json.dumps(dict(self.task, metadata=other_metadata)) + "\n")
+        self.assertEqual(matrix.load_tasks(manifest)[0]["context_sha256"],
+                         other_metadata["context_sha256"])
+        context.write_bytes(b"other\r\n")
+        with self.assertRaisesRegex(ValueError, r"manifest line 1: context_sha256 .* context bytes"):
+            matrix.load_tasks(manifest)
+
     def test_hashed_logs_count_attempts_once_not_cell_totals(self):
         logs = self.root / "logs"
         logs.mkdir()

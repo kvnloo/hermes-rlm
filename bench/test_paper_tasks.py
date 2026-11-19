@@ -5,6 +5,7 @@ helper and RULER metric; appendix E.1 predicates checked with independent cases.
 Run: PYTHONDONTWRITEBYTECODE=1 python3 bench/test_paper_tasks.py
 """
 from datetime import date
+import hashlib
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -173,6 +174,21 @@ class ManifestTests(unittest.TestCase):
             self.assertNotIn("SECRET", context.read_text())
             self.assertEqual([p.name for p in context.parent.iterdir()], ["context.txt"])
             self.assertEqual(len(row["metadata"]["source_context_sha256"]), 64)
+
+    def test_context_bytes_match_manifest_even_after_newline_conversion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            builder = TaskBuilder(directory, directory, directory)
+            fields = ("one", "test", 1024, "caf\u00e9\n", "Question?", "gold",
+                      "browse_exact", "source", "revision", "source-id")
+            row = builder.add(*fields)
+            context = Path(row["context_path"])
+            context.write_bytes(b"caf\xc3\xa9\r\n")
+            row = builder.add(*fields)
+            expected = b"caf\xc3\xa9\n"
+            self.assertEqual(context.read_bytes(), expected)
+            self.assertEqual(row["metadata"]["context_bytes"], len(expected))
+            self.assertEqual(row["metadata"]["context_sha256"],
+                             hashlib.sha256(expected).hexdigest())
 
 
 if __name__ == "__main__":

@@ -64,7 +64,12 @@ def load_tasks(manifest):
         if not isinstance(task["question"], str) or not isinstance(task["size_tokens"], (int, float)):
             raise ValueError(f"manifest line {n}: invalid question or size_tokens")
         task = dict(task, context_path=str(path.resolve()))
-        task["context_sha256"] = digest(path)
+        actual_sha = digest(path)
+        metadata = task.get("metadata")
+        if isinstance(metadata, dict) and "context_sha256" in metadata:
+            if metadata["context_sha256"] != actual_sha:
+                raise ValueError(f"manifest line {n}: context_sha256 does not match context bytes")
+        task["context_sha256"] = actual_sha
         task["task_sha256"] = json_hash(task)
         tasks.append(task)
     return tasks
