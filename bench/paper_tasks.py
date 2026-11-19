@@ -116,7 +116,8 @@ def score_task(task: dict, answer: str) -> float:
         if answer_type.endswith("NUMERIC"):
             try:
                 return 0.75 ** abs(int(gold) - int(prediction))
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, OverflowError):
+                # The mathematically tiny score rounds to zero at this distance.
                 return 0.0
         if answer_type.endswith("DATE"):
             # The upstream helper uses dateutil. Pin default to prevent today's

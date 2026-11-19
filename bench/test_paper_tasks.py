@@ -118,6 +118,14 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(oolong_gold("['entity']"), "entity")
         self.assertEqual(oolong_gold("[datetime.date(2023, 1, 6)]"), "2023-01-06T00:00:00")
 
+    def test_oolong_numeric_underflows_for_large_integer_distance(self):
+        scorer = dict(type="oolong", answer_type="ANSWER_TYPE.NUMERIC")
+        huge = 10 ** 400
+        for gold, answer in ((12, huge), (huge, 12)):
+            with self.subTest(gold_is_huge=(gold == huge)):
+                self.assertEqual(self.score(scorer, gold, f"Answer: {answer}"), 0.0)
+        self.assertEqual(self.score(scorer, huge, f"Answer: {huge - 2}"), .75 ** 2)
+
     def test_oolong_other_types(self):
         scorer = dict(type="oolong", answer_type="ANSWER_TYPE.LABEL")
         self.assertEqual(self.score(scorer, "entity", "Label: [entity]"), 1)
