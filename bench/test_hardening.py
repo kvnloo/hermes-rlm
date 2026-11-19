@@ -2,6 +2,7 @@
 
 reuse-checked: test_paper_matrix.py fixtures, audit_results.py and staged plugin FINAL trajectories.
 """
+import importlib.util
 import io
 import json
 import os
@@ -48,6 +49,8 @@ class HardeningTests(unittest.TestCase):
         self.ledger = Ledger(self.root / "ledger.db", cap=20)
 
     def collect(self, final="73521", prose="ANSWER: 73521", completed=True, child=None, recovered=False, broken=False):
+        if importlib.util.find_spec("yaml") is None:
+            self.skipTest("requires pyyaml (fresh_home writes config.yaml)")
         ledger = self.ledger
         observed = [{"role": "root", "tools": ["rlm_load", "rlm_exec"], "tool_calls": []}]
         class FakeRouter:

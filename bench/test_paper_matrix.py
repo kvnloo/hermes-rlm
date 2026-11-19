@@ -2,6 +2,7 @@
 
 reuse-checked: existing run_bench scoring and paper_tasks worker tests; no API calls.
 """
+import importlib.util
 import io
 import json
 import os
@@ -124,6 +125,7 @@ class MatrixTests(unittest.TestCase):
             self.assertNotIn("context_path", prompt)
         self.assertIn("max_depth=0", matrix.task_prompt(self.task, "rlm-no-subcalls"))
 
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "requires pyyaml (fresh_home writes config.yaml)")
     def test_fresh_homes_have_only_safe_seed(self):
         template = self.root / "template"
         template.mkdir()
@@ -196,6 +198,7 @@ class MatrixTests(unittest.TestCase):
         usage = response_usage(b'data: {"choices":[]}\n\ndata: {"usage":{"prompt_tokens":8}}\n\ndata: [DONE]\n')
         self.assertEqual(usage["prompt_tokens"], 8)
 
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "requires pyyaml (fresh_home writes config.yaml)")
     def test_hermes_row_end_to_end_adapter(self):
         context = self.root / "source.txt"
         context.write_text("73521 input only")
