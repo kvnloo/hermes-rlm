@@ -165,11 +165,13 @@ class Session:
         # Own the line buffering: select() can't see a line already pulled into a buffered text wrapper.
         fd = self.proc.stdout.fileno()
         scan = 0  # only look for the newline in new bytes: a 50 MB line must not be rescanned per chunk
-        while (nl := self._rbuf.find(b"\n", scan)) < 0:
-            scan = len(self._rbuf)
+        while True:
             left = deadline - time.monotonic()
-            if left <= 0:
+            if left <= 0:  # even a line that is already buffered doesn't outlive the deadline
                 raise TimeoutError
+            if (nl := self._rbuf.find(b"\n", scan)) >= 0:
+                break
+            scan = len(self._rbuf)
             ready, _, _ = select.select([fd], [], [], min(left, 1.0))
             if ready:
                 chunk = os.read(fd, 65536)

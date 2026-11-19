@@ -35,6 +35,13 @@ class ReadBufferedLines(unittest.TestCase):
             self.assertEqual((r["error"], r["stdout"], r["subcalls_this_cell"]), (None, "ok", 1))
             self.assertEqual(s.stats["restarts"], 0)
 
+    def test_buffered_line_does_not_outlive_the_deadline(self):
+        s = rlm.Session("t", log_dir=Path(tempfile.gettempdir()))
+        s.proc = mock.Mock()
+        s._rbuf = bytearray(b'{"type": "done"}\n')
+        with self.assertRaises(TimeoutError):
+            s._read(time.monotonic())
+
 
 if __name__ == "__main__":
     unittest.main()
