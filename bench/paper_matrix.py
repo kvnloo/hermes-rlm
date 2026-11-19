@@ -257,7 +257,7 @@ def hermes_stats(home):
     path = home / "state.db"
     if not path.exists():
         return {"session_ids": [], "discovery_traces": []}
-    with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         sessions = db.execute("SELECT id,input_tokens,output_tokens,api_call_count,tool_call_count FROM sessions").fetchall()
         traces = []
         for (calls,) in db.execute("SELECT tool_calls FROM messages WHERE tool_calls IS NOT NULL"):
