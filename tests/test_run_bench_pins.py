@@ -46,6 +46,11 @@ class Score(unittest.TestCase):
         self.assertFalse(run_bench.score(t, "ANSWER: u020 5, then u010"))
         self.assertFalse(run_bench.score(t, "ANSWER: u010 15"))
 
+    def test_top_bug_user_answer_without_a_user_is_false_not_a_crash(self):
+        t = {"id": "top_bug_user", "gold": "u010 5", "ties": ["u010"]}
+        for ans in ("ANSWER: 5", "ANSWER: none", "", None):
+            self.assertFalse(run_bench.score(t, ans))
+
     def test_last_answer_line_wins_and_fallback_is_tail(self):
         q = {"id": "count_billing", "gold": 42}
         self.assertTrue(run_bench.score(q, "ANSWER: 7\nthinking\nANSWER: 42"))
