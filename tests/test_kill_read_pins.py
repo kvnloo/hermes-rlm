@@ -1,4 +1,5 @@
 """Pin Session.kill (only kills a live proc, waits, clears it) and Session._read (deadline boundary, 1s select cap)."""
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,11 +36,15 @@ class KillReadPins(unittest.TestCase):
 
     def read(self, left):
         s = self.session()
-        s.proc = mock.Mock()
-        s.proc.stdout.readline.return_value = '{"type": "done"}\n'
+        r, w = os.pipe()  # real fd: works for readline() and for a reader that select()s then os.read()s the fd
+        s.proc = mock.Mock(stdout=os.fdopen(r))
+        s._rbuf = bytearray()  # only _spawn creates it; a buffering _read needs it, an old readline one ignores it
+        self.addCleanup(s.proc.stdout.close)
+        os.write(w, b'{"type": "done"}\n')
+        self.addCleanup(os.close, w)
         clock = mock.Mock(monotonic=mock.Mock(return_value=100.0))
         with mock.patch.object(rlm, 'time', clock), \
-                mock.patch.object(rlm.select, 'select', return_value=([s.proc.stdout], [], [])) as sel:
+                mock.patch.object(rlm.select, 'select', wraps=rlm.select.select) as sel:
             return s._read(100.0 + left), sel
 
     def test_deadline_reached_raises_without_polling(self):
