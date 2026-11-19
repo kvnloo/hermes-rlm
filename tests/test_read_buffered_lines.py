@@ -19,6 +19,21 @@ sys.stdout.flush()
 time.sleep(60)
 """
 
+RESIDUE_KERNEL = r"""
+import json, sys, time
+req = json.loads(sys.stdin.readline())
+sys.stdout.write(json.dumps({"type": "done", "stdout": "A", "tok": req["tok"]}) + "\n" + '{"type": "do')  # torn residue
+sys.stdout.flush()
+time.sleep(60)
+"""
+CLEAN_KERNEL = r"""
+import json, sys
+req = json.loads(sys.stdin.readline())
+sys.stdout.write(json.dumps({"type": "done", "stdout": "B", "tok": req["tok"]}) + "\n")
+sys.stdout.flush()
+sys.stdin.read()
+"""
+
 
 class ReadBufferedLines(unittest.TestCase):
     def test_second_line_of_one_read_is_not_stranded(self):
@@ -34,6 +49,21 @@ class ReadBufferedLines(unittest.TestCase):
             self.assertLess(time.monotonic() - t0, 3)  # not a cell timeout
             self.assertEqual((r["error"], r["stdout"], r["subcalls_this_cell"]), (None, "ok", 1))
             self.assertEqual(s.stats["restarts"], 0)
+
+    def test_respawn_drops_bytes_left_by_the_previous_kernel(self):
+        argv = [[sys.executable, "-I", "-c", k] for k in (RESIDUE_KERNEL, CLEAN_KERNEL)]
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(rlm, "sandbox_argv", side_effect=argv), \
+                mock.patch.dict("os.environ", {"RLM_CELL_TIMEOUT_S": "5"}):
+            s = rlm.Session("t", log_dir=Path(d))
+            try:
+                first = s.exec("1")
+                s.kill()
+                second = s.exec("2")
+            finally:
+                s.kill()
+            self.assertEqual((first["error"], first["stdout"]), (None, "A"))
+            self.assertEqual((second["error"], second["stdout"]), (None, "B"))
 
     def test_buffered_line_does_not_outlive_the_deadline(self):
         s = rlm.Session("t", log_dir=Path(tempfile.gettempdir()))
