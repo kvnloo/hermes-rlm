@@ -166,8 +166,13 @@ class Session:
                 if not line:
                     raise RuntimeError("sandbox kernel exited")
                 try:
-                    return json.loads(line)
-                except ValueError:  # torn or junk line: the protocol stream is unusable
+                    msg = json.loads(line)
+                    if not (isinstance(msg, dict) and ((msg.get("type") == "done" and isinstance(msg.get("stdout") or "", str)) or (
+                            msg.get("type") == "llm" and "id" in msg and isinstance(msg.get("prompts"), list)
+                            and all(isinstance(p, str) for p in msg["prompts"])))):
+                        raise ValueError("wrong shape")
+                    return msg
+                except ValueError:  # torn, junk or wrong-shaped line: the protocol stream is unusable
                     raise RuntimeError("sandbox kernel sent a malformed protocol line") from None
 
     def _send(self, msg: dict) -> None:
