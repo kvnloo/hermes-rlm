@@ -207,8 +207,8 @@ class Session:
             out = [f.result() for f in [pool.submit(contextvars.copy_context().run, one, pr) for pr in prompts]]
         for p, (_, usage) in zip(prompts, out):
             self.stats["subcall_prompt_chars"] += len(p)
-            self.stats["prompt_tokens"] += usage.get("prompt_tokens", 0)
-            self.stats["completion_tokens"] += usage.get("completion_tokens", 0)
+            self.stats["prompt_tokens"] += usage.get("prompt_tokens") or 0
+            self.stats["completion_tokens"] += usage.get("completion_tokens") or 0
         return {"type": "llm_result", "id": req["id"], "results": [t for t, _ in out]}
 
     def load(self, paths, task_id: str = "default") -> dict:
