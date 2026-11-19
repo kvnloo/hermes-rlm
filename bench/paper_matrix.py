@@ -318,9 +318,10 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     disable_thinking=args.disable_thinking) as router:
             if arm == "base-truncated":
                 with (cwd / "context.txt").open(encoding="utf-8", newline="") as context:
-                    text = context.read()
+                    truncated = context.read(args.base_context_chars)
+                    original_chars = len(truncated) + sum(
+                        len(chunk) for chunk in iter(lambda: context.read(64 * 1024), ""))
                 # Declared UTF-8 character truncation, not invented tokenizer counts.
-                truncated = text[:args.base_context_chars]
                 body = {"model": args.root_model, "messages": [{"role": "user", "content":
                         truncated + "\n\n" + prompt}], "max_tokens": args.max_tokens, "stream": False}
                 start = time.monotonic()
@@ -329,7 +330,7 @@ def run_one(task, arm, rep, args, protocol, ledger):
                 row.update(answer=response.get("choices", [{}])[0].get("message", {}).get("content") or "",
                            wall_s=round(time.monotonic() - start, 3), exit_code=0 if status == 200 else 1,
                            timed_out=False, truncation={"kind": "head_characters", "chars": len(truncated),
-                           "original_chars": len(text), "truncated": len(text) > len(truncated)})
+                           "original_chars": original_chars, "truncated": original_chars > len(truncated)})
                 (run_dir / "base-response.json").write_bytes(data)
             else:
                 env = {k: v for k, v in os.environ.items()
