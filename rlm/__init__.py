@@ -257,7 +257,7 @@ class Session:
                 reply = {"stdout": "", "final": None, "error":
                          f"cell exceeded {lim['cell_timeout_s']}s and was killed; kernel restarted "
                          "with `context` reloaded, other variables are gone"}
-            except RuntimeError as exc:
+            except (RuntimeError, BrokenPipeError) as exc:
                 self.kill()
                 self.stats["restarts"] += 1
                 reply = {"stdout": "", "final": None, "error": f"{exc}; kernel restarted, variables lost"}
