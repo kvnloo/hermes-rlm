@@ -178,7 +178,7 @@ def fresh_home(home, template, plugin, arm, router, args):
         "auxiliary": {"transient_retries": 0,
             "rlm_subcall": {"provider": "paper-sub", "base_url": router.url + "/sub/v1",
                             "api_key_env": "PAPER_PROXY_KEY", "model": args.sub_model,
-                            "fallback_models": [], "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}},
+                            "fallback_models": []},
             "background_review": {"enabled": False}},
         "plugins": {"enabled": ["rlm"], "entries": {"rlm": {"settings": settings}}},
         "tools": {"tool_search": {"enabled": "on" if arm == "fork-rlm" else "off",

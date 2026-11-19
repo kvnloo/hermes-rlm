@@ -46,7 +46,7 @@ Each run gets a new `input/` working directory containing only an unlabeled copy
 
 `size_tokens` is the dataset label, not a measured root tokenizer count. Base truncation decodes the context as UTF-8 without changing line endings and counts characters, controlled by `--base-context-chars`. It is not presented as exact token-window replication. The chosen cap must leave room for the question and output within the selected provider's model window.
 
-`--disable-thinking` sends `chat_template_kwargs.enable_thinking=false` to every NIM request across every arm, including root, child and base requests. The flag is part of each row's protocol. Omitting it preserves provider defaults. This is a study choice, not the paper's reasoning configuration.
+`--disable-thinking` sends `chat_template_kwargs.enable_thinking=false` to every NIM request across every arm, including root, child and base requests. The flag is part of each row's protocol. Omitting it leaves the harness thinking override unset, including in generated child configuration; the host and provider determine their own defaults. This is a study choice, not the paper's reasoning configuration.
 
 ## Accounting and retries
 
