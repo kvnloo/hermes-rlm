@@ -62,6 +62,21 @@ class MainRow(unittest.TestCase):
         self.assertEqual(list(json.loads(line)), ["arm", "question", "correct", "wall_s",
                                                    "root_input_tokens", "subcalls", "nano_stop", "error"])
 
+    def test_rerun_into_same_out_appends_rows_and_reuses_runs_dir(self):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, d)
+        (d / "c").mkdir()
+        (d / "c" / "corpus.txt").write_text("x")
+        _, qs, meta = make_corpus.build(3000, 7)
+        (d / "c.gold.json").write_text(json.dumps({"questions": qs[:1], "meta": meta}))
+        out = d / "out.jsonl"
+        for _ in range(2):
+            with mock.patch.object(sys, "argv", ["run_bench", str(d / "c"), str(out), "--arms", "nano-rlm"]), \
+                    mock.patch.object(run_bench, "run_nano", return_value={"answer": "x"}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                run_bench.main()
+        self.assertEqual(len(out.read_text().splitlines()), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

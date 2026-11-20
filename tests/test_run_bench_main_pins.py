@@ -120,6 +120,13 @@ class MainOutage(unittest.TestCase):
         self.assertEqual({r["model"] for r in rows}, {"nvidia/nemotron-3.5-lightning:free"})
         self.assertEqual({r["corpus_tokens"] for r in rows}, {make_corpus.build(3000, 7)[2]["approx_tokens"]})
 
+    def test_questions_filter_runs_question_major_with_arms_interleaved_per_question(self):
+        rows, err, calls, _ = self._main(["ANSWER: a"] * 4, questions="niah,count_billing")
+        self.assertIsNone(err)
+        self.assertEqual([(r["question"], r["arm"]) for r in rows],
+                         [("niah", "hermes-rlm"), ("niah", "hermes-tools"),
+                          ("count_billing", "hermes-rlm"), ("count_billing", "hermes-tools")])
+
     def test_timeout_row_is_an_error_not_provider_and_run_continues(self):
         rows, err, calls, _ = self._main([subprocess.TimeoutExpired("h", 900), "ANSWER: x"], questions="niah")
         self.assertIsNone(err)
