@@ -25,6 +25,16 @@ class LoadCorpusDotGit(unittest.TestCase):
             corpus, _ = rlm.load_corpus(d, 100)
             self.assertEqual(corpus, {"a.txt": "hello"})
 
+    def test_nested_and_deep_dotgit_are_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for rel in (".git/objects/aa/x", "sub/.git/HEAD", "sub/.git/objects/bb/y"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("x")
+            (root / "sub" / "b.txt").write_text("hi")
+            corpus, _ = rlm.load_corpus(d, 100)
+            self.assertEqual(corpus, {"b.txt": "hi"})
+
 
 if __name__ == "__main__":
     unittest.main()
