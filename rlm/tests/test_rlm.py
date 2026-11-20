@@ -150,3 +150,14 @@ def test_stub_helper_keeps_a_real_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "hrs_present_mod", sentinel)
     _stub_if_missing(monkeypatch, "hrs_present_mod", x=1)
     assert sys.modules["hrs_present_mod"] is sentinel and not hasattr(sentinel, "x")
+
+
+def test_stub_helper_installs_missing_dotted_module_with_attrs(monkeypatch):
+    for n in ("hrs_absent_pkg", "hrs_absent_pkg.sub"):
+        monkeypatch.delitem(sys.modules, n, raising=False)
+    _stub_if_missing(monkeypatch, "hrs_absent_pkg")
+    _stub_if_missing(monkeypatch, "hrs_absent_pkg.sub", x=1)
+    assert sys.modules["hrs_absent_pkg.sub"].x == 1
+    assert sys.modules["hrs_absent_pkg"].sub is sys.modules["hrs_absent_pkg.sub"]
+    monkeypatch.undo()
+    assert "hrs_absent_pkg" not in sys.modules and "hrs_absent_pkg.sub" not in sys.modules
