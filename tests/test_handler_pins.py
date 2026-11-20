@@ -77,6 +77,25 @@ class HandlerPins(unittest.TestCase):
         self.assertEqual(json.loads(rlm._load_handler({})), {'error': 'Boom: b'})
         self.assertEqual(json.loads(rlm._exec_handler({})), {'error': 'Boom: b'})
 
+    def test_load_session_for_failure_is_caught(self):
+        with mock.patch.object(rlm, 'session_for', side_effect=OSError('nolog')):
+            self.assertEqual(json.loads(rlm._load_handler({'paths': ['a']})), {'error': 'OSError: nolog'})
+
+    def test_unserializable_result_is_enveloped(self):
+        class Odd(Fake):
+            def load(self, paths, task_id):
+                return {'x': object()}
+
+            def exec(self, code):
+                return {'x': object()}
+        self.patch(Odd())
+        for out in (rlm._load_handler({}), rlm._exec_handler({})):
+            self.assertTrue(json.loads(out)['error'].startswith('TypeError'))
+
+    def test_rlm_command_accepts_extra_kwargs(self):
+        with mock.patch.dict(rlm._sessions, {}, clear=True):
+            self.assertTrue(rlm._rlm_command('', task_id='T', session_id='S').endswith('no RLM sessions yet'))
+
     def test_rlm_command_lists_limits_and_sessions(self):
         with mock.patch.dict(rlm._sessions, {}, clear=True):
             self.assertTrue(rlm._rlm_command().endswith('\nno RLM sessions yet'))
