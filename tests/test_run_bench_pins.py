@@ -78,6 +78,11 @@ class Prompt(unittest.TestCase):
         self.assertTrue(p.endswith("'ANSWER: <answer>'."))
         self.assertNotIn(g["niah"]["gold"], p)
 
+    def test_prompt_groups_thousands_in_both_counts(self):
+        g, _ = _gold()
+        p = run_bench.prompt_for(g["niah"], {"approx_tokens": 1234567, "records": 12345}, Path("/c"))
+        self.assertIn("1,234,567 tokens (12,345 records)", p)
+
 
 class Usage(unittest.TestCase):
     def test_rlm_usage_reads_a_real_session_log(self):
