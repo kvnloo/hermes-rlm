@@ -17,6 +17,14 @@ class LoadCorpusDotGit(unittest.TestCase):
             corpus, _ = rlm.load_corpus(str(corpus_dir), 100)
             self.assertEqual(corpus, {"a.txt": "hello"})
 
+    def test_corpus_dir_named_dotgit_is_loaded(self):
+        with tempfile.TemporaryDirectory() as d:
+            corpus_dir = Path(d) / ".git"
+            corpus_dir.mkdir()
+            (corpus_dir / "a.txt").write_text("hello")
+            corpus, _ = rlm.load_corpus(str(corpus_dir), 100)
+            self.assertEqual(corpus, {"a.txt": "hello"})
+
     def test_dotgit_inside_dir_is_still_skipped(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
