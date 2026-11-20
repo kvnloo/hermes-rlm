@@ -459,9 +459,10 @@ EXEC_SCHEMA = {
     "description": (
         "Run Python in the RLM REPL (state persists across calls). Available: `context`; "
         "`llm_query(prompt) -> str` asks a sub-model about a slice you embed in the prompt (it sees "
-        "nothing else); `llm_batch([prompts]) -> [str]` runs many in parallel; `FINAL(answer)` records "
-        "the answer. FINAL_VAR('name', citations=[cite(source,start,end)]) returns an existing "
-        "variable; all finals over loaded sources need verified character spans. Depth is 1: "
+        "nothing else); `llm_batch([prompts]) -> [str]` runs many in parallel. "
+        "`FINAL(answer, citations=[cite(source, start, end)])` submits the answer. "
+        "`FINAL_VAR('name', citations=[cite(source, start, end)])` submits an existing variable. "
+        "Use verified character spans for every final over nonempty loaded sources. Depth is 1: "
         "sub-LLMs see no tools or implicit context. Probe structure, then use llm_batch for semantic "
         "extraction over ALL relevant chunks, store buffers and aggregate them. Do not solve a "
         "long semantic task by printing context into your own prompt. Outputs are truncated.\n\n"

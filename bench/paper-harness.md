@@ -124,3 +124,47 @@ plain-context input, provided the selected model's window also fits.
 Otherwise label the baseline a truncation comparison.
 
 No model runs or provider calls are needed for generation or the unit tests.
+
+## Protocol-adherence report
+
+Run against the
+[published strict summary](https://github.com/kvnloo/z0evals/blob/19f53a3742c5ae7c0e9fc2b610fe613bfe425376/studies/rlm-paper-replication-v1/data/summary.json):
+
+```sh
+python bench/protocol_adherence.py --summary "$STUDY_SUMMARY_JSON"
+```
+
+The 300 primary executions include 124 collection-invalid rows and 53
+additional strict rejections, for **177 strict-invalid** and 123 strict-valid
+executions. Of 180 Hermes executions, **28 are protocol-adherent**. The
+published adherence totals across all arms are 28 adherent, 152 nonadherent,
+24 unknown, and 96 not applicable. Base and Nano reference outcomes do not
+establish Hermes adherence. Invalid is not incorrect; invalid scores are null.
+The public aggregate did not retain per-row audit reasons or tool transcripts.
+It cannot rank historical failure causes.
+
+For authorized local data only, run `audit_results.py` on the collection
+artifacts, then pass one or more audited JSONL files to
+`protocol_adherence.py --summary ... --audited-rows ...`. The optional
+evidence section is separate from the published counts, and uses invalid
+Hermes rows as the per-cause denominator. The report emits counts only:
+
+- **Missing validated FINAL:** a successfully parsed transcript had no
+  accepted citation-valid FINAL. Missing or malformed transcript is unknown.
+- **Uncited answer:** a linked `rlm_exec` result explicitly rejected missing
+  citations, or returned a nonempty FINAL without citations.
+- **REPL bypass via another tool:** a linked successful `read_file` result
+  returned text from the exact copied benchmark `context.txt`. Exposing a
+  tool, reading an unrelated file, unlinked text, and unknown access routes
+  are not counted. No conclusion about all possible bypasses is made.
+- **Child error:** audited plugin subcall error, not a recovered physical
+  request or a cancellation. Missing or malformed logs are unknown.
+
+These are overlapping observations, not causal assignments. Older audited
+rows without the two linked-transcript signals leave them unknown. The
+auditor adds observations without changing validity or adherence decisions.
+No archived rows were rerun for this report. The prompt repair removes an
+uncited FINAL example that contradicted the actual span checker, and reminds
+the model to verify the current result before ending the turn. It addresses a
+documented failure mechanism, not a measured top cause or a proven historical
+improvement.
