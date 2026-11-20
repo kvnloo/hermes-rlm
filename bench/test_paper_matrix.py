@@ -275,6 +275,28 @@ class MatrixTests(unittest.TestCase):
         usage = response_usage(b'data: {"choices":[]}\n\ndata: {"usage":{"prompt_tokens":8}}\n\ndata: [DONE]\n')
         self.assertEqual(usage["prompt_tokens"], 8)
 
+    def test_sse_usage_without_optional_space_reaches_ledger(self):
+        data = (b'data:{"choices":[]}\r\n\r\n'
+                b'data:{"usage":{"prompt_tokens":8,"completion_tokens":3}}\r\n\r\n'
+                b'data:[DONE]\r\n\r\n')
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = {"Content-Type": "text/event-stream"}
+
+        with Router(self.ledger, "sse") as router, \
+             patch.dict(os.environ, NVIDIA_API_KEY="offline-fixture"), \
+             patch("urllib.request.urlopen", return_value=Response(data)) as forward:
+            self.assertEqual(router.forward({"stream": True}, ROOT, "root"),
+                             (200, data, "text/event-stream"))
+            self.assertEqual(json.loads(forward.call_args.args[0].data)["stream_options"],
+                             {"include_usage": True})
+        summary = self.ledger.summary("sse")
+        self.assertTrue(summary["usage_complete"])
+        self.assertEqual(summary["request_attempts"], 1)
+        self.assertEqual(summary["root_prompt_tokens"], 8)
+        self.assertEqual(summary["root_completion_tokens"], 3)
+
     def test_hermes_row_end_to_end_adapter(self):
         context = self.root / "source.txt"
         context.write_text("73521 input only")

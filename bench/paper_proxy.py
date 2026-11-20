@@ -223,8 +223,11 @@ def response_usage(data):
         if data.lstrip().startswith(b"{"):
             return json.loads(data).get("usage") or {}
         for line in data.splitlines():
-            if line.startswith(b"data: ") and line[6:] != b"[DONE]":
-                usage = json.loads(line[6:]).get("usage") or usage
+            if line.startswith(b"data:"):
+                # SSE treats one space after the field separator as optional.
+                payload = line[5:].removeprefix(b" ")
+                if payload and payload != b"[DONE]":
+                    usage = json.loads(payload).get("usage") or usage
     except (ValueError, TypeError):
         pass
     return usage
