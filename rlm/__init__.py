@@ -300,6 +300,10 @@ class Session:
                     # Provider exception text may contain credentials or request content.
                     text = f"[llm_query error: {type(exc).__name__}]"
                     return text
+                except SystemExit:
+                    status = "error"
+                    self.stats["cost_unknown"] += 1
+                    raise
                 finally:
                     self.log("subcall", attempt=attempt, status=status, prompt_chars=len(prompt),
                              output_chars=len(text), ms=int((time.monotonic() - t0) * 1000),
