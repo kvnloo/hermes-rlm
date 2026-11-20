@@ -224,6 +224,10 @@ def main(argv=None):
     source_hashes = {"auditor": sha(Path(__file__).read_bytes()),
                      "scorer": sha(Path(__file__).with_name("paper_tasks.py").read_bytes()),
                      "manifest": sha(manifest)}
+    if any(isinstance(task.get("scoring"), dict) and task["scoring"].get("type") == "oolong_author"
+           for task in tasks.values()):
+        source_hashes["oolong_author_scorer"] = sha(
+            Path(__file__).with_name("paper_oolong_author.py").read_bytes())
     out.mkdir(parents=True, exist_ok=True, mode=0o700)
     stats = {}
     for path in raw_paths:

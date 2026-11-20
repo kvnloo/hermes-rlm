@@ -124,3 +124,66 @@ plain-context input, provided the selected model's window also fits.
 Otherwise label the baseline a truncation comparison.
 
 No model runs or provider calls are needed for generation or the unit tests.
+
+## Offline paper-family materialization
+
+These loaders take **local, caller-supplied** dataset files and emit the existing
+`TaskBuilder` manifest/coverage layout; they do not fetch, decode published
+obfuscation, or call a model. Local inputs are marked unverified even when a reference
+revision is recorded as an expectation. Keep the reference data and labeled manifests
+private and outside the agent's run directory.
+
+```sh
+python bench/paper_datasets.py --reference "$REF" --out "$OPS/paper-tasks" \
+  --oolong-input "$TREC_VALIDATION_JSONL" \
+  --pairs-reference-dir "$PAIRS_AUTHOR_DATA" \
+  --codeqa-input "$LONGBENCH_JSONL" \
+  --browse-queries "$BROWSE_QUERIES_DECODED_JSONL" \
+  --browse-selection "$BROWSE_1000_DOC_IDS_JSONL" \
+  --browse-corpus "$BROWSE_CORPUS_DECODED_JSONL"
+PYTHONPATH=bench python -c 'from pathlib import Path; from paper_matrix import load_tasks; import sys; print(len(load_tasks(Path(sys.argv[1]))))' \
+  "$OPS/paper-tasks/full.jsonl"
+```
+
+- Use `--datasets oolong oolong-pairs browsecomp-plus codeqa` to select any
+  subset; all four are default. Paths omitted in the command use the existing
+  normalized reference filenames under `$REF/data`. `--oolong-input` and
+  `--browse-corpus` are repeatable; those inputs and CodeQA also accept Parquet
+  with DuckDB installed. The selected rows are not truncated to a smoke sample.
+- OOLONG uses validation `trec_coarse` fields: IDs, nominal lengths, unlabeled
+  contexts, questions and raw answer types/values. OOLONG-Pairs takes the
+  [author's per-length questions/gold](https://huggingface.co/datasets/mit-oasys/oolong-pairs/tree/d1e1522b86ac0c169bbc890b0471408aaa29e8fa)
+  (`oolong-pairs-{size}.json`) and the caller's matching trec_coarse context;
+  distinct contexts at one length are rejected in this mode. With
+  `--pairs-questions`, the alternative Appendix D.1 question JSON supplies
+  `task_id`/`question` for all 20 items and gold is reconstructed from dated,
+  labeled TREC records. The labeled context never enters the agent copy.
+- BrowseComp-Plus uses decoded `query_id/query/answer/gold_docs/evidence_docs`
+  query JSONL, a separate selection JSONL with `query_id/docids` and optional
+  `required_docids`, and decoded `docid/text` background data. Each selection
+  must contain exactly 1,000 ordered, distinct documents, including every
+  gold/evidence document. Missing selected documents fail materialization.
+  Allow temporary disk space for selected background text and final per-query
+  context files. A supplied selection is not represented as the paper's sample.
+- CodeQA keeps every `Code Repository Understanding / Code repo QA` row from
+  LongBench-v2 (or accepts an already filtered normalized JSONL), with all four
+  answer choices and a separate gold key. `full.jsonl`, `smoke.jsonl`,
+  `pairs-all20.jsonl` and `codeqa-optional.jsonl` are loadable manifests;
+  `coverage.json` and `blocked.jsonl` are reporting artifacts.
+
+Scoring: OOLONG uses the verbatim pure scorer from
+[Alex Zhang's RLM training environment](https://github.com/alexzhang13/rlm/blob/d86154e6b03b9ff880b31a1b0eadd273ff92b9e8/training/environments/oolong/oolong/env.py)
+and requires `python-dateutil` before a non-dry run. Its provenance and fixed-example parity are
+verified; its identity as the original paper-table runner is not established.
+Pairs set-F1 and CodeQA choice accuracy are local metric implementations, not
+proof of original parser/code parity. BrowseComp defaults to **unscored**
+unless a trusted external `--scorer` is supplied to the matrix. Check that
+it exports a working `score_task(task, answer)` before running inference;
+file preflight does not verify the external evaluator or semantic parity. The official
+[semantic judge](https://github.com/texttron/BrowseComp-Plus/blob/main/docs/llm_as_judge.md)
+is not bundled or invoked. `--browse-exact-diagnostic` explicitly opts into
+the existing deterministic exact-match scorer; do not compare it to official
+scores. This does not reproduce the paper's private run/sample.
+
+Offline check: `python -B -m unittest discover -s bench -p test_paper_datasets.py`.
+The tests use synthetic inputs, not full-corpus materialization.
