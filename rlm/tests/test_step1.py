@@ -342,6 +342,18 @@ def test_opt_in_registration_and_cleanup(monkeypatch):
     assert 'llm_batch' in rlm.LOAD_SCHEMA['description'] or 'rlm_exec' in rlm.LOAD_SCHEMA['description']
 
 
+def test_batch_systemexit_is_accounted_and_propagates(make_session):
+    async def subcall(prompt, max_tokens):
+        raise SystemExit('boom')
+
+    s = make_session(subcall=subcall)
+    with pytest.raises(SystemExit):
+        asyncio.run(s._batch(['a'], 8, time.monotonic() + 5))
+    rows = [json.loads(line) for line in s.log_path.read_text().splitlines()]
+    assert [r['status'] for r in rows if r['event'] == 'subcall'] == ['error']
+    assert s.stats['cost_unknown'] == 1
+
+
 @pytest.mark.parametrize('exc', [asyncio.CancelledError('boom'), SystemExit('boom'), OSError('boom')])
 def test_serve_llm_raise_is_an_error_reply_and_kernel_stays_in_sync(make_session, exc):
     async def subcall(prompt, max_tokens):
