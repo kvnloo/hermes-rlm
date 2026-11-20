@@ -56,6 +56,13 @@ class RegisterPins(unittest.TestCase):
         rlm.default_subcall('p', 7)
         self.assertEqual(self.ctx.completes[0]['task'], next(iter(self.ctx.aux)))
 
+    def test_aux_task_kwargs(self):
+        kw = self.ctx.aux['rlm_subcall']
+        self.assertEqual(set(kw), {'display_name', 'description'})
+        for v in kw.values():
+            self.assertIsInstance(v, str)
+            self.assertTrue(v.strip())
+
     def test_command_and_ctx(self):
         self.assertIs(rlm._CTX, self.ctx)
         handler, kw = self.ctx.cmds['rlm']
