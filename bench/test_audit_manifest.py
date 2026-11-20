@@ -12,7 +12,7 @@ import audit_results as audit
 class ManifestAuditTests(unittest.TestCase):
     def check_case(self, arm, mode):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()  # macOS: /var is a symlink to /private/var
             task = dict(id='t', gold='A', scoring='choice', context_path='absent-context.txt')
             frozen = dict(task, context_path=str(root / task['context_path']),
                           context_sha256='recorded-context-hash')
