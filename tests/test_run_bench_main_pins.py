@@ -41,6 +41,8 @@ class RunHermes(unittest.TestCase):
                                "--provider", "prov", "-m", "mod", "-q", "PROMPT"])
         kw = r.call_args.kwargs
         self.assertEqual((kw["cwd"], kw["timeout"]), ("/corp", 5))
+        self.assertIs(kw["capture_output"], True)  # stdout/stderr are what the answer and session_id are parsed from
+        self.assertIs(kw["text"], True)  # str, not bytes: p.stdout + p.stderr and the regexes need text
         self.assertEqual(kw["env"]["RLM_LOG_DIR"], d)
         self.assertEqual(kw["env"]["PATH"], os.environ["PATH"])  # inherited, not replaced
         self.assertEqual(kw["env"]["HERMES_HOME"], str(run_bench.HERMES_HOME))
