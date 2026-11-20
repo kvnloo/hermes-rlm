@@ -36,6 +36,8 @@ def _recv():
 def llm_batch(prompts, max_tokens=None):
     """Run sub-model calls concurrently on the host; returns one string per prompt."""
     global _next_id
+    if isinstance(prompts, (str, bytes)):
+        raise TypeError("llm_batch takes a list of prompts; use llm_query for a single prompt")
     prompts = [str(p) for p in prompts]
     _next_id += 1
     _send({"type": "llm", "id": _next_id, "prompts": prompts, "max_tokens": max_tokens})

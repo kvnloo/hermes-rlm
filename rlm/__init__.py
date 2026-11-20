@@ -108,7 +108,7 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
         for hit in sorted(_glob.glob(raw, recursive=True)) or [raw]:
             p = Path(hit)
             if p.is_dir():
-                files += sorted(f for f in p.rglob("*") if f.is_file() and ".git" not in f.parts)
+                files += sorted(f for f in p.rglob("*") if f.is_file() and ".git" not in f.relative_to(p).parts)
             elif p.is_file():
                 files.append(p)
             else:
@@ -226,7 +226,13 @@ class Session:
                 return reply
             if reply.get("type") != "llm":
                 raise RuntimeError("invalid sandbox protocol message")
-            self._send(self._serve_llm(reply, deadline), deadline)
+            try:
+                answer = self._serve_llm(reply, deadline)
+            except (Exception, asyncio.CancelledError, SystemExit) as exc:
+                # The kernel is blocked on this reply; never leave it unanswered.
+                answer = {"type": "llm_result", "id": reply.get("id"),
+                          "error": f"llm_batch failed on the host: {type(exc).__name__}"}
+            self._send(answer, deadline)
 
     def _cost_refusal(self):
         cap = self.lim["max_cost"]

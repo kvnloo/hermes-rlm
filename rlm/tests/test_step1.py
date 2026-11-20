@@ -352,3 +352,18 @@ def test_batch_systemexit_is_accounted_and_propagates(make_session):
     rows = [json.loads(line) for line in s.log_path.read_text().splitlines()]
     assert [r['status'] for r in rows if r['event'] == 'subcall'] == ['error']
     assert s.stats['cost_unknown'] == 1
+
+
+@pytest.mark.parametrize('exc', [asyncio.CancelledError('boom'), SystemExit('boom'), OSError('boom')])
+def test_serve_llm_raise_is_an_error_reply_and_kernel_stays_in_sync(make_session, exc):
+    async def subcall(prompt, max_tokens):
+        raise exc
+
+    s = make_session(subcall=subcall, settings={'timeout_s': 5})
+    if isinstance(exc, OSError):  # an ordinary host failure outside the per-slice handler
+        s._batch = lambda *a: (_ for _ in ()).throw(exc)
+    assert not s.exec('x = 7')['error']
+    first = s.exec("try:\n    print(llm_batch(['a']))\nexcept Exception as e:\n    print('caught', e)")
+    nxt = s.exec('print(x + 1)')
+    assert first['stdout'] == f'caught llm_batch failed on the host: {type(exc).__name__}\n', first
+    assert (nxt['error'], nxt['stdout'].strip(), s.stats['restarts']) == (None, '8', 0), nxt
