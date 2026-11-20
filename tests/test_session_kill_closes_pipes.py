@@ -3,6 +3,7 @@ import gc
 import tempfile
 import unittest
 import warnings
+from unittest import mock
 from pathlib import Path
 import rlm
 
@@ -58,6 +59,24 @@ class SessionKillClosesPipes(unittest.TestCase):
         old.wait()
         s.exec("1")
         self.assertIsNot(s.proc, old)
+        self.assertTrue(old.stdin.closed and old.stdout.closed)
+
+    def test_exec_timeout_restart_releases_old_pipes(self):
+        s = self.session()
+        s.lim = {**s.lim, "cell_timeout_s": 1}
+        old = s.proc
+        r = s.exec("while True: pass")
+        self.assertIn("was killed", r["error"])
+        self.assertIsNone(s.proc)
+        self.assertTrue(old.stdin.closed and old.stdout.closed)
+
+    def test_exec_runtime_error_restart_releases_old_pipes(self):
+        s = self.session()
+        old = s.proc
+        with mock.patch.object(s, "_request", side_effect=RuntimeError("sandbox kernel exited")):
+            r = s.exec("pass")
+        self.assertIn("kernel restarted", r["error"])
+        self.assertIsNone(s.proc)
         self.assertTrue(old.stdin.closed and old.stdout.closed)
 
     def test_kill_without_process_is_noop(self):
