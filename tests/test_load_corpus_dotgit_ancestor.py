@@ -43,6 +43,13 @@ class LoadCorpusDotGit(unittest.TestCase):
             corpus, _ = rlm.load_corpus(d, 100)
             self.assertEqual(corpus, {"b.txt": "hi"})
 
+    def test_dotgit_file_gitlink_is_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".git").write_text("gitdir: ../elsewhere")
+            (Path(d) / "a.txt").write_text("hello")
+            corpus, _ = rlm.load_corpus(d, 100)
+            self.assertEqual(corpus, {"a.txt": "hello"})
+
 
 if __name__ == "__main__":
     unittest.main()
