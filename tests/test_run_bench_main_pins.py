@@ -68,7 +68,7 @@ class RunHermes(unittest.TestCase):
 
 
 class MainOutage(unittest.TestCase):
-    def _main(self, answers, arms="hermes-rlm,hermes-tools", questions=""):
+    def _main(self, answers, arms="hermes-rlm,hermes-tools", questions="", repeats=None):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, d)
         corpus = d / "c"
@@ -78,6 +78,8 @@ class MainOutage(unittest.TestCase):
         (d / "c.gold.json").write_text(json.dumps({"questions": qs, "meta": meta}))
         out = d / "out.jsonl"
         argv = ["run_bench", str(corpus), str(out), "--arms", arms, "--questions", questions]
+        if repeats:
+            argv += ["--repeats", str(repeats)]
         procs = [a if isinstance(a, Exception) else _cp(a + "\nsession_id: s\n") for a in answers]
         err = None
         with mock.patch.object(sys, "argv", argv), \
@@ -106,6 +108,15 @@ class MainOutage(unittest.TestCase):
         self.assertEqual(calls, 2)
         self.assertEqual([(r["arm"], r["question"], r["correct"], r["error"] if "error" in r else None) for r in rows],
                          [("hermes-rlm", "niah", True, None), ("hermes-tools", "niah", False, None)])
+
+    def test_repeats_interleave_arms_and_rows_record_rep_model_and_corpus_tokens(self):
+        rows, err, calls, _ = self._main(["ANSWER: a"] * 4, questions="niah", repeats=2)
+        self.assertIsNone(err)
+        self.assertEqual(calls, 4)
+        self.assertEqual([(r["rep"], r["arm"]) for r in rows],
+                         [(0, "hermes-rlm"), (0, "hermes-tools"), (1, "hermes-rlm"), (1, "hermes-tools")])
+        self.assertEqual({r["model"] for r in rows}, {"nvidia/nemotron-3.5-lightning:free"})
+        self.assertEqual({r["corpus_tokens"] for r in rows}, {make_corpus.build(3000, 7)[2]["approx_tokens"]})
 
     def test_timeout_row_is_an_error_not_provider_and_run_continues(self):
         rows, err, calls, _ = self._main([subprocess.TimeoutExpired("h", 900), "ANSWER: x"], questions="niah")
