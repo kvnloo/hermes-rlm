@@ -1,4 +1,4 @@
-"""Pins that _batch accounts a SystemExit sub-call (status=error, cost_unknown) before propagating."""
+"""Pins that _batch accounts a SystemExit or KeyboardInterrupt sub-call (status=error, cost_unknown) before propagating."""
 import asyncio
 import json
 import tempfile
@@ -10,13 +10,19 @@ import rlm
 
 class BatchSystemExitTests(unittest.TestCase):
     def test_systemexit_is_accounted_and_propagates(self):
+        self._pin(SystemExit)
+
+    def test_keyboardinterrupt_is_accounted_and_propagates(self):
+        self._pin(KeyboardInterrupt)
+
+    def _pin(self, exc):
         async def subcall(prompt, max_tokens):
-            raise SystemExit("boom")
+            raise exc("boom")
 
         with tempfile.TemporaryDirectory() as d:
             s = rlm.Session("k", log_dir=Path(d), allow_unsandboxed=True, subcall=subcall)
             self.addCleanup(s.kill)
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(exc):
                 asyncio.run(s._batch(["a"], 8, time.monotonic() + 5))
             rows = [json.loads(line) for line in s.log_path.read_text().splitlines()]
             self.assertEqual([r["status"] for r in rows if r["event"] == "subcall"], ["error"])

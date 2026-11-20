@@ -306,7 +306,7 @@ class Session:
                     # Provider exception text may contain credentials or request content.
                     text = f"[llm_query error: {type(exc).__name__}]"
                     return text
-                except SystemExit:
+                except (SystemExit, KeyboardInterrupt):
                     status = "error"
                     self.stats["cost_unknown"] += 1
                     raise
