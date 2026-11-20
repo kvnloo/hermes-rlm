@@ -389,7 +389,8 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     row.update(rlm_usage(run_dir / "rlm-logs"))
                     if args.hermes_ingress == "library":
                         if stdout.strip():
-                            summary = json.loads(stdout.strip().splitlines()[-1])
+                            # The adapter emits UTF-8 JSON; only physical LF separates records.
+                            summary = json.loads(stdout.strip().rsplit("\n", 1)[-1])
                             for field in ("answer", "session_ids", "discovery_traces", "tool_calls",
                                           "library_tools", "library_error", "library_partial",
                                           "completed", "failed", "interrupted", "turn_exit_reason",
