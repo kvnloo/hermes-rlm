@@ -115,6 +115,34 @@ class MatrixTests(unittest.TestCase):
         self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'base-truncated'))
         self.assertIn('End with ANSWER:', matrix.task_prompt(self.task, 'nano-rlm'))
 
+    def test_base_truncation_keeps_utf8_literally_before_character_cap(self):
+        context = self.root / "context.txt"
+        source = "é\r\n猫\r☀\n"
+        context.write_bytes(source.encode("utf-8"))
+        task = dict(self.task, context_path=str(context), context_sha256=matrix.digest(context),
+                    task_sha256="hash")
+        args = SimpleNamespace(ops_dir=self.root / "ops", root_model=ROOT, sub_model=SUB,
+                               timeout=10, disable_thinking=False, max_tokens=64,
+                               base_context_chars=4, scorer=matrix.HERE / "paper_tasks.py")
+        bodies = []
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = {"Content-Type": "application/json"}
+
+        def upstream(request, **kwargs):
+            bodies.append(json.loads(request.data))
+            return Response(b'{"choices":[{"message":{"content":"ANSWER: 73521"}}]}')
+
+        with patch.dict(os.environ, NVIDIA_API_KEY="not-written"), \
+             patch("urllib.request.urlopen", side_effect=upstream):
+            row = matrix.run_one(task, "base-truncated", 0, args, {}, self.ledger)
+        self.assertTrue(row["valid"], row.get("error"))
+        self.assertEqual(bodies[0]["messages"][0]["content"],
+                         "é\r\n猫\n\n" + matrix.task_prompt(task, "base-truncated"))
+        self.assertEqual(row["truncation"], {"kind": "head_characters", "chars": 4,
+                                            "original_chars": len(source), "truncated": True})
+
     def test_no_raw_context_or_gold_in_rlm_prompt(self):
         for arm in matrix.ARMS[1:]:
             prompt = matrix.task_prompt(self.task, arm)
@@ -156,6 +184,26 @@ class MatrixTests(unittest.TestCase):
         pair = dict(self.task, scoring="pairs_f1", gold=[[1, 2], [1, 3]])
         self.assertAlmostEqual(matrix.score_answer(pair, "ANSWER: [(2,1)]", matrix.HERE / "paper_tasks.py")["score"], 2/3)
 
+    def test_scoring_hook_rejects_nonfinite_and_nonnumeric_grades(self):
+        scorer = self.root / "custom_scorer.py"
+        scorer.write_text("def score_task(task, answer):\n    return task['fixture_grade']\n")
+        rejected = (float("nan"), float("inf"), 10 ** 400,
+                    {"score": float("-inf")}, {"score": None}, {"score": "0.5"})
+        for grade in rejected:
+            with self.subTest(grade=grade), self.assertRaisesRegex(ValueError, "score"):
+                matrix.score_answer(dict(self.task, fixture_grade=grade), "answer", scorer)
+
+    def test_scoring_hook_preserves_valid_numeric_and_dict_grades(self):
+        scorer = self.root / "custom_scorer.py"
+        scorer.write_text("def score_task(task, answer):\n    return task['fixture_grade']\n")
+        for grade, expected in ((0, {"score": 0.0}), (0.25, {"score": 0.25}),
+                                (True, {"score": 1.0}), (-0.1, {"score": -0.1}),
+                                ({"score": 2 ** 53 + 1, "note": "ok"}, {"score": 2 ** 53 + 1, "note": "ok"})):
+            with self.subTest(grade=grade):
+                result = matrix.score_answer(dict(self.task, fixture_grade=grade), "answer", scorer)
+                self.assertEqual(result, expected)
+                self.assertIs(type(result["score"]), type(expected["score"]))
+
     def test_interleaving_resume_invalid_is_terminal(self):
         task = dict(self.task, task_sha256="hash")
         scheduled = list(matrix.schedule([task], matrix.ARMS, 2))
@@ -179,6 +227,38 @@ class MatrixTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             matrix.load_tasks(manifest)
 
+    def test_manifest_checks_declared_context_bytes_before_scheduling(self):
+        context = self.root / "context.txt"
+        context.write_bytes(b"first\r\n")
+        other_metadata = {"context_sha256": matrix.digest(context)}
+        manifest = self.root / "tasks.jsonl"
+        manifest.write_text(json.dumps(dict(self.task, metadata=other_metadata)) + "\n")
+        self.assertEqual(matrix.load_tasks(manifest)[0]["context_sha256"],
+                         other_metadata["context_sha256"])
+        context.write_bytes(b"other\r\n")
+        with self.assertRaisesRegex(ValueError, r"manifest line 1: context_sha256 .* context bytes"):
+            matrix.load_tasks(manifest)
+
+    def test_dry_run_rejects_partial_unknown_task_selection(self):
+        (self.root / "context.txt").write_text("context", encoding="utf-8")
+        manifest = self.root / "manifest.jsonl"
+        manifest.write_text(json.dumps(self.task) + "\n", encoding="utf-8")
+        args = [str(manifest), str(self.root / "out.jsonl"),
+                "--ops-dir", str(self.root / "ops"), "--home-template", str(self.root),
+                "--released-source", str(self.root), "--released-python", sys.executable,
+                "--fork-source", str(self.root), "--fork-python", sys.executable,
+                "--nano-source", str(self.root), "--dry-run", "--arms", "base-truncated",
+                "--repeats", "1"]
+        stream = io.StringIO()
+        with patch.object(matrix, "source_sha", return_value="fixture"), \
+             patch.object(matrix, "run_one") as run, patch("sys.stdout", stream):
+            with self.assertRaisesRegex(ValueError, "unknown --task-ids: missing"):
+                matrix.main(args + ["--task-ids", "tiny,missing"])
+            self.assertEqual(stream.getvalue(), "")
+            self.assertEqual(matrix.main(args + ["--task-ids", "tiny"]), 0)
+            run.assert_not_called()
+        self.assertEqual(json.loads(stream.getvalue())["task_id"], "tiny")
+
     def test_hashed_logs_count_attempts_once_not_cell_totals(self):
         logs = self.root / "logs"
         logs.mkdir()
@@ -194,6 +274,28 @@ class MatrixTests(unittest.TestCase):
     def test_sse_usage(self):
         usage = response_usage(b'data: {"choices":[]}\n\ndata: {"usage":{"prompt_tokens":8}}\n\ndata: [DONE]\n')
         self.assertEqual(usage["prompt_tokens"], 8)
+
+    def test_sse_usage_without_optional_space_reaches_ledger(self):
+        data = (b'data:{"choices":[]}\r\n\r\n'
+                b'data:{"usage":{"prompt_tokens":8,"completion_tokens":3}}\r\n\r\n'
+                b'data:[DONE]\r\n\r\n')
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = {"Content-Type": "text/event-stream"}
+
+        with Router(self.ledger, "sse") as router, \
+             patch.dict(os.environ, NVIDIA_API_KEY="offline-fixture"), \
+             patch("urllib.request.urlopen", return_value=Response(data)) as forward:
+            self.assertEqual(router.forward({"stream": True}, ROOT, "root"),
+                             (200, data, "text/event-stream"))
+            self.assertEqual(json.loads(forward.call_args.args[0].data)["stream_options"],
+                             {"include_usage": True})
+        summary = self.ledger.summary("sse")
+        self.assertTrue(summary["usage_complete"])
+        self.assertEqual(summary["request_attempts"], 1)
+        self.assertEqual(summary["root_prompt_tokens"], 8)
+        self.assertEqual(summary["root_completion_tokens"], 3)
 
     def test_hermes_row_end_to_end_adapter(self):
         context = self.root / "source.txt"
