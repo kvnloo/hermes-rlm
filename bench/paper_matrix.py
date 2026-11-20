@@ -10,6 +10,7 @@ from contextlib import closing
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -43,7 +44,9 @@ def json_hash(value):
 
 def load_tasks(manifest):
     tasks, seen = [], set()
-    for n, line in enumerate(manifest.read_text().splitlines(), 1):
+    with manifest.open(encoding="utf-8") as stream:
+        lines = stream.readlines()
+    for n, line in enumerate(lines, 1):
         if not line.strip():
             continue
         task = json.loads(line)
@@ -61,10 +64,17 @@ def load_tasks(manifest):
             raise ValueError(f"manifest line {n}: context_path must be a regular non-symlink file")
         if re.search(r"gold|label|manifest|answer", path.name, re.I):
             raise ValueError(f"manifest line {n}: evaluator-looking context filename")
-        if not isinstance(task["question"], str) or not isinstance(task["size_tokens"], (int, float)):
+        size = task["size_tokens"]
+        if (not isinstance(task["question"], str) or type(size) not in (int, float)
+                or size < 0 or (isinstance(size, float) and not math.isfinite(size))):
             raise ValueError(f"manifest line {n}: invalid question or size_tokens")
         task = dict(task, context_path=str(path.resolve()))
-        task["context_sha256"] = digest(path)
+        actual_sha = digest(path)
+        metadata = task.get("metadata")
+        if isinstance(metadata, dict) and "context_sha256" in metadata:
+            if metadata["context_sha256"] != actual_sha:
+                raise ValueError(f"manifest line {n}: context_sha256 does not match context bytes")
+        task["context_sha256"] = actual_sha
         task["task_sha256"] = json_hash(task)
         tasks.append(task)
     return tasks
@@ -86,7 +96,8 @@ def row_key(task, arm, rep, protocol):
 def completed(out):
     done = set()
     if out.exists():
-        lines = out.read_text().splitlines()
+        with out.open(encoding="utf-8") as stream:
+            lines = stream.readlines()
         for i, line in enumerate(lines):
             try:
                 done.add(json.loads(line)["row_key"])
@@ -95,17 +106,36 @@ def completed(out):
     return done
 
 
+class InvalidScorerResult(ValueError):
+    """A scorer result cannot be emitted in the benchmark row."""
+
+
 def score_answer(task, answer, module_path):
     # Dataset worker owns this implementation. Do not silently substitute an LLM judge.
     spec = importlib.util.spec_from_file_location("paper_tasks_scoring", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     result = module.score_task(task, answer)
-    if isinstance(result, (float, int, bool)):
-        result = {"score": float(result)}
+    scalar = isinstance(result, (float, int))
+    if scalar:
+        result = {"score": result}
     if not isinstance(result, dict) or "score" not in result:
         raise ValueError("score_task must return a numeric score or dict containing score")
-    return result
+    score = result["score"]
+    if not isinstance(score, (float, int)):
+        raise ValueError("score_task score must be a finite number")
+    try:
+        score = float(score)
+    except OverflowError as exc:
+        raise ValueError("score_task score must be a finite number") from exc
+    if not math.isfinite(score):
+        raise ValueError("score_task score must be a finite number")
+    grade = {"score": score} if scalar else result
+    try:
+        json.dumps(grade, ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidScorerResult("score_task result must serialize as UTF-8 JSON") from exc
+    return grade
 
 
 def task_prompt(task, arm):
@@ -157,7 +187,7 @@ def fresh_home(home, template, plugin, arm, router, args):
         "auxiliary": {"transient_retries": 0,
             "rlm_subcall": {"provider": "paper-sub", "base_url": router.url + "/sub/v1",
                             "api_key_env": "PAPER_PROXY_KEY", "model": args.sub_model,
-                            "fallback_models": [], "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}},
+                            "fallback_models": []},
             "background_review": {"enabled": False}},
         "plugins": {"enabled": ["rlm"], "entries": {"rlm": {"settings": settings}}},
         "tools": {"tool_search": {"enabled": "on" if arm == "fork-rlm" else "off",
@@ -236,7 +266,7 @@ def hermes_stats(home):
     path = home / "state.db"
     if not path.exists():
         return {"session_ids": [], "discovery_traces": []}
-    with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         sessions = db.execute("SELECT id,input_tokens,output_tokens,api_call_count,tool_call_count FROM sessions").fetchall()
         traces = []
         for (calls,) in db.execute("SELECT tool_calls FROM messages WHERE tool_calls IS NOT NULL"):
@@ -296,9 +326,11 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     upstream_timeout=min(args.timeout, 120),
                     disable_thinking=args.disable_thinking) as router:
             if arm == "base-truncated":
-                text = (cwd / "context.txt").read_text()
+                with (cwd / "context.txt").open(encoding="utf-8", newline="") as context:
+                    truncated = context.read(args.base_context_chars)
+                    original_chars = len(truncated) + sum(
+                        len(chunk) for chunk in iter(lambda: context.read(64 * 1024), ""))
                 # Declared UTF-8 character truncation, not invented tokenizer counts.
-                truncated = text[:args.base_context_chars]
                 body = {"model": args.root_model, "messages": [{"role": "user", "content":
                         truncated + "\n\n" + prompt}], "max_tokens": args.max_tokens, "stream": False}
                 start = time.monotonic()
@@ -307,7 +339,7 @@ def run_one(task, arm, rep, args, protocol, ledger):
                 row.update(answer=response.get("choices", [{}])[0].get("message", {}).get("content") or "",
                            wall_s=round(time.monotonic() - start, 3), exit_code=0 if status == 200 else 1,
                            timed_out=False, truncation={"kind": "head_characters", "chars": len(truncated),
-                           "original_chars": len(text), "truncated": len(text) > len(truncated)})
+                           "original_chars": original_chars, "truncated": original_chars > len(truncated)})
                 (run_dir / "base-response.json").write_bytes(data)
             else:
                 env = {k: v for k, v in os.environ.items()
@@ -357,7 +389,8 @@ def run_one(task, arm, rep, args, protocol, ledger):
                     row.update(rlm_usage(run_dir / "rlm-logs"))
                     if args.hermes_ingress == "library":
                         if stdout.strip():
-                            summary = json.loads(stdout.strip().splitlines()[-1])
+                            # The adapter emits UTF-8 JSON; only physical LF separates records.
+                            summary = json.loads(stdout.strip().rsplit("\n", 1)[-1])
                             for field in ("answer", "session_ids", "discovery_traces", "tool_calls",
                                           "library_tools", "library_error", "library_partial",
                                           "completed", "failed", "interrupted", "turn_exit_reason",
@@ -475,6 +508,13 @@ def main(argv=None):
         raise ValueError("unknown or duplicate arms")
     if min(args.repeats, args.timeout, args.max_subcalls, args.max_turns, args.base_context_chars) < 1:
         raise ValueError("budgets and repeats must be positive")
+    if args.limit_tasks is not None and args.limit_tasks < 1:
+        raise ValueError("--limit-tasks must be positive")
+    if not args.scorer.is_file():
+        raise ValueError("scorer must be a regular file")
+    scorer_sha256 = digest(args.scorer)
+    soul = args.home_template / "SOUL.md"
+    soul_sha256 = digest(soul) if soul.is_file() else None
     args.ops_dir.mkdir(parents=True, exist_ok=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # One controller per output; the request ledger additionally serializes provider reservations.
@@ -483,7 +523,11 @@ def main(argv=None):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         tasks = load_tasks(args.manifest)
         if args.task_ids:
-            tasks = [t for t in tasks if t["id"] in args.task_ids.split(",")]
+            requested = set(args.task_ids.split(","))
+            unknown = requested - {t["id"] for t in tasks}
+            if unknown:
+                raise ValueError(f"unknown --task-ids: {', '.join(sorted(unknown))}")
+            tasks = [t for t in tasks if t["id"] in requested]
         if args.smallest_sniah:
             tasks = [t for t in tasks if re.sub(r"[^a-z]", "", t["family"].lower()) in {"sniah", "niah"}]
             tasks = sorted(tasks, key=lambda t: (t["size_tokens"], t["id"]))[:1]
@@ -493,13 +537,16 @@ def main(argv=None):
             raise ValueError("no tasks selected")
         shas = {k: source_sha(getattr(args, k + "_source")) for k in ("released", "fork", "nano")}
         plugin_hash = json_hash({str(p.relative_to(args.plugin_source)): digest(p)
-                               for p in sorted(args.plugin_source.glob("*.py"))})
+                               for p in sorted([*args.plugin_source.glob("*.py"),
+                                                *args.plugin_source.glob("plugin.yaml")])})
         protocol = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
                     if k not in {"out", "ops_dir", "manifest", "repeats", "dry_run", "task_ids", "limit_tasks", "smallest_sniah"}}
         protocol.update(source_shas=shas, plugin_sha256=plugin_hash,
                         harness_sha256=digest(Path(__file__)), proxy_sha256=digest(HERE / "paper_proxy.py"),
                         hermes_client_sha256=digest(HERE / "hermes_client.py"),
-                        scorer_sha256=digest(args.scorer) if args.scorer.exists() else None)
+                        scorer_sha256=scorer_sha256)
+        if soul_sha256 is not None:
+            protocol["home_soul_sha256"] = soul_sha256
         done = completed(args.out)
         ledger = Ledger(args.ops_dir / "request-ledger.sqlite3", args.provider_cap)
         for task, arm, rep in schedule(tasks, arms, args.repeats):
@@ -510,8 +557,13 @@ def main(argv=None):
                 print(json.dumps({"row_key": key, "task_id": task["id"], "arm": arm, "rep": rep}))
                 continue
             row = run_one(task, arm, rep, args, protocol, ledger)
-            with args.out.open("a") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            with args.out.open("a+b") as f:
+                separator = b""
+                if f.tell():
+                    f.seek(-1, os.SEEK_END)
+                    if f.read(1) not in (b"\n", b"\r"):
+                        separator = b"\n"
+                f.write(separator + (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
                 f.flush()
                 os.fsync(f.fileno())
             print(json.dumps({k: row.get(k) for k in ("task_id", "arm", "rep", "valid", "score", "wall_s", "error")}), flush=True)

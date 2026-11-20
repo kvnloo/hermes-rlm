@@ -5,6 +5,7 @@
 
 Each row: arm, question, correct, answer, wall_s, root/sub tokens, api calls, subcalls. Arms are
 interleaved per repeat so provider drift hits all of them. Gold comes from make_corpus.py.
+Execution errors are unscored (`correct` is null), not incorrect answers.
 
 reuse-checked: z0evals harness-speed-v1 -- times harnesses but has no corpus scoring or RLM arm.
 """
@@ -165,12 +166,11 @@ def main():
                 except subprocess.TimeoutExpired:
                     row = {"answer": "", "wall_s": args.timeout, "error": "timeout"}
                 row.update(arm=arm, question=q["id"], rep=rep, model=args.model,
-                           corpus_tokens=gold["meta"]["approx_tokens"], correct=score(q, row.get("answer")),
-                           ts=time.time())
+                           corpus_tokens=gold["meta"]["approx_tokens"], ts=time.time())
                 if not row.get("error") and re.search(r"HTTP 429|rate-limited|didn't produce a reply",
                                                       row.get("answer") or ""):
                     row["error"] = "provider"  # an outage is not a wrong answer; report rows as invalid
-                    row["correct"] = None
+                row["correct"] = None if "error" in row else score(q, row.get("answer"))
                 with open(args.out, "a") as f:
                     f.write(json.dumps(row) + "\n")
                 if row.get("error") == "provider":

@@ -5,6 +5,7 @@ helper and RULER metric; appendix E.1 predicates checked with independent cases.
 Run: PYTHONDONTWRITEBYTECODE=1 python3 bench/test_paper_tasks.py
 """
 from datetime import date
+import hashlib
 import importlib.util
 from pathlib import Path
 import sys
@@ -12,6 +13,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import paper_tasks
 from paper_tasks import (A, D, E, H, L, N, TaskBuilder, labeled_users,
                          oolong_gold, oolong_parse, pair_predicates, pairs_gold,
                          parse_pairs, read_jsonl, score_task)
@@ -120,6 +122,14 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(oolong_gold("['entity']"), "entity")
         self.assertEqual(oolong_gold("[datetime.date(2023, 1, 6)]"), "2023-01-06T00:00:00")
 
+    def test_oolong_numeric_underflows_for_large_integer_distance(self):
+        scorer = dict(type="oolong", answer_type="ANSWER_TYPE.NUMERIC")
+        huge = 10 ** 400
+        for gold, answer in ((12, huge), (huge, 12)):
+            with self.subTest(gold_is_huge=(gold == huge)):
+                self.assertEqual(self.score(scorer, gold, f"Answer: {answer}"), 0.0)
+        self.assertEqual(self.score(scorer, huge, f"Answer: {huge - 2}"), .75 ** 2)
+
     def test_oolong_other_types(self):
         scorer = dict(type="oolong", answer_type="ANSWER_TYPE.LABEL")
         self.assertEqual(self.score(scorer, "entity", "Label: [entity]"), 1)
@@ -135,7 +145,7 @@ class ScoringTests(unittest.TestCase):
     def test_oolong_date_requires_dateutil_instead_of_scoring_zero(self):
         scorer = dict(type="oolong", answer_type="ANSWER_TYPE.DATE")
         with mock.patch.dict(sys.modules, {"dateutil": None, "dateutil.parser": None}):
-            with self.assertRaises(ImportError):
+            with self.assertRaises(paper_tasks.DateParserUnavailable):
                 self.score(scorer, "2023-01-06T00:00:00", "Date: January 6, 2023")
 
     def test_ruler_choices_browse(self):
@@ -176,6 +186,21 @@ class ManifestTests(unittest.TestCase):
             self.assertNotIn("SECRET", context.read_text())
             self.assertEqual([p.name for p in context.parent.iterdir()], ["context.txt"])
             self.assertEqual(len(row["metadata"]["source_context_sha256"]), 64)
+
+    def test_context_bytes_match_manifest_even_after_newline_conversion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            builder = TaskBuilder(directory, directory, directory)
+            fields = ("one", "test", 1024, "caf\u00e9\n", "Question?", "gold",
+                      "browse_exact", "source", "revision", "source-id")
+            row = builder.add(*fields)
+            context = Path(row["context_path"])
+            context.write_bytes(b"caf\xc3\xa9\r\n")
+            row = builder.add(*fields)
+            expected = b"caf\xc3\xa9\n"
+            self.assertEqual(context.read_bytes(), expected)
+            self.assertEqual(row["metadata"]["context_bytes"], len(expected))
+            self.assertEqual(row["metadata"]["context_sha256"],
+                             hashlib.sha256(expected).hexdigest())
 
 
 if __name__ == "__main__":

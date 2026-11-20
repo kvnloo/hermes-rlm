@@ -3,6 +3,7 @@
 reuse-checked: test_paper_matrix.py fixtures, audit_results.py and staged plugin FINAL trajectories.
 """
 import importlib.util
+from contextlib import redirect_stdout
 import io
 import json
 import os
@@ -48,7 +49,7 @@ class HardeningTests(unittest.TestCase):
             "--nano-source", str(self.root)])
         self.ledger = Ledger(self.root / "ledger.db", cap=20)
 
-    def collect(self, final="73521", prose="ANSWER: 73521", completed=True, child=None, recovered=False, broken=False):
+    def collect(self, final="73521", prose="ANSWER: 73521", completed=True, child=None, recovered=False, broken=False, emit_summary=None):
         if importlib.util.find_spec("yaml") is None:
             self.skipTest("requires pyyaml (fresh_home writes config.yaml)")
         ledger = self.ledger
@@ -84,7 +85,8 @@ class HardeningTests(unittest.TestCase):
             summary = {"answer": prose, "library_error": False, "library_partial": False,
                        "completed": completed, "failed": False, "interrupted": False,
                        "turn_exit_reason": "completed" if completed else "max_iterations_reached(10/10)"}
-            return {"stdout": "broken" if broken else json.dumps(summary), "stderr": "", "exit_code": 0,
+            output = emit_summary(summary) if emit_summary else json.dumps(summary)
+            return {"stdout": "broken" if broken else output, "stderr": "", "exit_code": 0,
                     "timed_out": False, "wall_s": 0.01}
         with patch.object(matrix, "Router", FakeRouter), patch.object(matrix, "run_process", side_effect=process), \
              patch.object(matrix, "hermes_stats", return_value={}):
@@ -110,6 +112,22 @@ class HardeningTests(unittest.TestCase):
         self.assertEqual(row["score"], 1)
         self.assertEqual(row["root_answer"], "ANSWER: incorrect")
         self.assertEqual(row["validated_final"]["citations"], CITATIONS)
+
+    def test_library_summary_keeps_unicode_separators_in_answer(self):
+        def emit(summary):
+            with patch.object(hermes_client, "run", return_value=summary), redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(hermes_client.main(
+                    ["Code?", "--base-url", "http://unused.invalid", "--model", "fixture"]), 0)
+            return out.getvalue()
+
+        for separator in (" ", "\u0085", "\u2028", "\u2029"):
+            with self.subTest(separator=separator):
+                prose = "The code is:" + separator + "73521"
+                row = self.collect(prose=prose, emit_summary=emit)
+                self.assertTrue(row["valid"], row.get("error"))
+                self.assertEqual(row["root_answer"], prose)
+                self.assertEqual(row["answer"], "73521")
+                self.assertEqual(row["score"], 1)
 
     def test_incomplete_budget_exit_is_invalid(self):
         row = self.collect(completed=False)

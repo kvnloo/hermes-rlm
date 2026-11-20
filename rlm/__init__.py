@@ -123,10 +123,12 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
             skipped += 1
             continue
         text = data.decode("utf-8", "replace")
-        total += len(text)
+        source = os.path.relpath(f, common) if common else str(f)
+        # The corpus keeps the last value for a source name, not every read.
+        total += len(text) - len(corpus.get(source, ""))
         if total > max_chars:
             raise ValueError(f"corpus exceeds RLM_MAX_CORPUS_CHARS={max_chars}")
-        corpus[os.path.relpath(f, common) if common else str(f)] = text
+        corpus[source] = text
     return corpus, skipped
 
 
@@ -528,5 +530,6 @@ def register(ctx) -> None:
     ctx.register_hook('transform_llm_output', gate.transform)
     ctx.register_hook('on_session_start', reset_session)
     ctx.register_hook('on_session_reset', reset_session)
+    ctx.register_hook('on_session_end', gate.end)
     ctx.register_middleware('tool_execution', gate.execute)
     ctx.on_unload(_shutdown)
