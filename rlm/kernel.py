@@ -18,6 +18,7 @@ _proto_out = os.fdopen(os.dup(1), "w", buffering=1)
 _proto_in = sys.stdin
 _next_id = 0
 _final = None
+_citations = []
 
 
 def _send(msg):
@@ -35,6 +36,8 @@ def _recv():
 def llm_batch(prompts, max_tokens=None):
     """Run sub-model calls concurrently on the host; returns one string per prompt."""
     global _next_id
+    if isinstance(prompts, (str, bytes)):
+        raise TypeError("llm_batch takes a list of prompts; use llm_query for a single prompt")
     prompts = [str(p) for p in prompts]
     _next_id += 1
     _send({"type": "llm", "id": _next_id, "prompts": prompts, "max_tokens": max_tokens})
@@ -49,15 +52,32 @@ def llm_query(prompt, max_tokens=None):
     return llm_batch([prompt], max_tokens)[0]
 
 
-def FINAL(answer):
-    """Record the final answer; the host returns it to the root model."""
-    global _final
+def cite(source, start, end):
+    """Reference an original source with Unicode character offsets, end exclusive."""
+    return {"source": source, "start": start, "end": end}
+
+
+def FINAL(answer, citations=None):
+    """Submit an answer; the host validates every citation against original sources."""
+    global _final, _citations
+    if isinstance(answer, dict) and 'answer' in answer:
+        citations = answer.get('citations', citations)
+        answer = answer['answer']
     _final = str(answer)
-    print("FINAL recorded.")
+    _citations = [] if citations is None else citations
+    print("FINAL recorded; awaiting host citation validation.")
 
 
-ns = {"__name__": "__rlm__", "llm_query": llm_query, "llm_batch": llm_batch, "FINAL": FINAL,
-      "context": None}
+def FINAL_VAR(variable_name, citations=None):
+    """Submit an existing REPL variable by name, without printing its full value."""
+    if not isinstance(variable_name, str) or variable_name not in ns:
+        raise ValueError('FINAL_VAR needs the name of an existing REPL variable')
+    FINAL(ns[variable_name], citations=citations)
+
+
+ns = {"__name__": "__rlm__", "llm_query": llm_query, "llm_batch": llm_batch,
+      "llm_query_batched": llm_batch, "FINAL": FINAL, "FINAL_VAR": FINAL_VAR,
+      "cite": cite, "context": None}
 
 
 def _run(code):
@@ -71,14 +91,14 @@ def _run(code):
 
 
 def main():
-    global _final
+    global _final, _citations
     while True:
         msg = _recv()
         if msg["type"] == "load":
             ns["context"] = msg["context"]
             _send({"type": "done", "stdout": "", "error": None, "final": None})
             continue
-        buf, _final = io.StringIO(), None
+        buf, _final, _citations = io.StringIO(), None, []
         old_out, old_err = sys.stdout, sys.stderr
         sys.stdout = sys.stderr = buf
         error = None
@@ -88,7 +108,8 @@ def main():
             error = traceback.format_exc(limit=-3)
         finally:
             sys.stdout, sys.stderr = old_out, old_err
-        _send({"type": "done", "stdout": buf.getvalue(), "error": error, "final": _final})
+        _send({"type": "done", "stdout": buf.getvalue(), "error": error,
+               "final": _final, "citations": _citations})
 
 
 if __name__ == "__main__":
