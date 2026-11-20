@@ -163,6 +163,20 @@ class NanoClientPins(unittest.TestCase):
         closed = types.SimpleNamespace(field_meta="junk")
         self.assertIsNone(run(closed, None)[0]["snapshot"])
 
+    def test_missing_required_env_fails_before_spawn(self):
+        for var in ENV:
+            mod, spawned, _ = load(None, None)
+            with mock.patch.dict(os.environ, {k: v for k, v in ENV.items() if k != var}, clear=True), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(KeyError):
+                    asyncio.run(mod.main("P"))
+            self.assertEqual(spawned, {}, var)
+
+    def test_empty_snapshot_on_close_response_falls_through_to_prompt_response(self):
+        closed = types.SimpleNamespace(field_meta={META: {}})
+        resp = types.SimpleNamespace(field_meta={META: {"from": "resp"}})
+        self.assertEqual(run(closed, resp)[0]["snapshot"], {"from": "resp"})
+
 
 if __name__ == "__main__":
     unittest.main()
