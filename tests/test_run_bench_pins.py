@@ -129,6 +129,17 @@ class Usage(unittest.TestCase):
             finally:
                 run_bench.HERMES_HOME = old
 
+    def test_hermes_usage_is_read_only_and_never_creates_state_db(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = run_bench.HERMES_HOME
+            run_bench.HERMES_HOME = Path(tmp)
+            try:
+                with self.assertRaises(sqlite3.OperationalError):
+                    run_bench.hermes_usage("s1")
+            finally:
+                run_bench.HERMES_HOME = old
+            self.assertFalse((Path(tmp) / "state.db").exists())
+
     def test_hermes_usage_closes_its_sqlite_handle(self):
         with tempfile.TemporaryDirectory() as tmp:
             seed = sqlite3.connect(Path(tmp) / "state.db")
