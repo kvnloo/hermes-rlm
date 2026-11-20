@@ -32,7 +32,7 @@ def imported_roots():
     return found
 
 
-SKIP_GATING = {"yaml", "dateutil"}  # tests skip visibly when these are absent
+SKIP_GATING = {"yaml", "dateutil", "matplotlib", "tokenizers"}  # tests skip visibly when these are absent
 
 
 def missing_modules():
@@ -50,7 +50,7 @@ class RequirementsTests(unittest.TestCase):
 
     def test_missing_modules_reports_absent_imports(self):
         with mock.patch("importlib.util.find_spec", return_value=None):
-            self.assertEqual(missing_modules(), ["dateutil", "yaml"])
+            self.assertEqual(missing_modules(), ["dateutil", "matplotlib", "tokenizers", "yaml"])
 
     @unittest.skipUnless(os.environ.get("BENCH_REQUIRE_DEPS"), "set BENCH_REQUIRE_DEPS=1 to fail instead of skipping")
     def test_bench_deps_installed_so_nothing_skips(self):

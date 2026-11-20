@@ -3,3 +3,5 @@ PyYAML
 python-dateutil
 duckdb
 agent-client-protocol
+tokenizers
+matplotlib

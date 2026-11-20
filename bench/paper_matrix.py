@@ -25,8 +25,11 @@ from pathlib import Path
 
 from paper_proxy import Ledger, MODELS, ROOT, SUB, Router
 from run_bench import rlm_usage
+from scaling_tokenizer import LocalTokenizer
 
 ARMS = ("base-truncated", "rlm-no-subcalls", "released-rlm", "fork-rlm", "nano-rlm")
+BASE_ARMS = {"base-truncated", "base-full"}
+SUPPORTED_ARMS = {*ARMS, "base-full"}
 HERE = Path(__file__).resolve().parent
 
 
@@ -144,7 +147,7 @@ def task_prompt(task, arm):
     question = task["question"]
     if choices:
         question += "\nChoices: " + json.dumps(choices, ensure_ascii=False)
-    if arm == "base-truncated":
+    if arm in BASE_ARMS:
         return question + "\nEnd with ANSWER: <answer>."
     intro = (f"Task input is the local file context.txt, approximately {task['size_tokens']} dataset-nominal tokens. "
              "The root prompt contains only this metadata, not the raw context. ")
@@ -302,7 +305,21 @@ def child_outcomes_ok(arm, row):
         status == "ok" for status, count in statuses.items() if count)
 
 
-def run_one(task, arm, rep, args, protocol, ledger):
+def full_context_prompt(path, prompt, args, tokenizer):
+    with path.open(encoding="utf-8", newline="") as stream:
+        context = stream.read()
+    content = context + "\n\n" + prompt
+    tokens = tokenizer.count(content)
+    return context, content, {
+        "content_tokens": tokens,
+        "chat_overhead_tokens": args.base_chat_overhead_tokens,
+        "reserved_output_tokens": args.max_tokens,
+        "window_tokens": args.base_window_tokens,
+        "fits": tokens + args.base_chat_overhead_tokens + args.max_tokens <= args.base_window_tokens,
+    }
+
+
+def run_one(task, arm, rep, args, protocol, ledger, *, base_tokenizer=None):
     key = row_key(task, arm, rep, protocol)
     run_id = key[:16] + "-" + uuid.uuid4().hex[:8]
     run_dir = args.ops_dir / "runs" / run_id
@@ -319,27 +336,43 @@ def run_one(task, arm, rep, args, protocol, ledger):
            "protocol": protocol, "ts": time.time(), "status": "invalid", "valid": False,
            "correct": None, "score": None}
     prompt = task_prompt(task, arm)
-    (run_dir / "prompt.txt").write_text(prompt)
+    (run_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+    metadata = task.get("metadata")
+    if isinstance(metadata, dict) and "tokenizer_sha256" in metadata:
+        row["length_tokenizer_sha256"] = metadata["tokenizer_sha256"]
+        row["length_tokenizer_engine"] = metadata.get("tokenizer_engine")
     router = None
     try:
+        if arm == "base-full":
+            context, content, capacity = full_context_prompt(cwd / "context.txt", prompt, args, base_tokenizer)
+            row.update(full_context=capacity,
+                       truncation={"kind": "none", "chars": len(context),
+                                   "original_chars": len(context), "truncated": False})
+            if not capacity["fits"]:
+                row.update(status="skipped", error="base_full_window_exceeded",
+                           accounting=ledger.summary(run_id), logical_call_outcomes=[], api_calls=0)
+                return row
         with Router(ledger, run_id, args.root_model, args.sub_model,
                     upstream_timeout=min(args.timeout, 120),
                     disable_thinking=args.disable_thinking) as router:
-            if arm == "base-truncated":
-                with (cwd / "context.txt").open(encoding="utf-8", newline="") as context:
-                    truncated = context.read(args.base_context_chars)
-                    original_chars = len(truncated) + sum(
-                        len(chunk) for chunk in iter(lambda: context.read(64 * 1024), ""))
-                # Declared UTF-8 character truncation, not invented tokenizer counts.
-                body = {"model": args.root_model, "messages": [{"role": "user", "content":
-                        truncated + "\n\n" + prompt}], "max_tokens": args.max_tokens, "stream": False}
+            if arm in BASE_ARMS:
+                if arm == "base-truncated":
+                    with (cwd / "context.txt").open(encoding="utf-8", newline="") as context_file:
+                        truncated = context_file.read(args.base_context_chars)
+                        original_chars = len(truncated) + sum(
+                            len(chunk) for chunk in iter(lambda: context_file.read(64 * 1024), ""))
+                    # Declared character truncation, not a tokenizer count.
+                    content = truncated + "\n\n" + prompt
+                    row["truncation"] = {"kind": "head_characters", "chars": len(truncated),
+                                         "original_chars": original_chars, "truncated": original_chars > len(truncated)}
+                body = {"model": args.root_model, "messages": [{"role": "user", "content": content}],
+                        "max_tokens": args.max_tokens, "stream": False}
                 start = time.monotonic()
                 status, data, _ = router.forward(body, args.root_model, "root")
                 response = json.loads(data)
                 row.update(answer=response.get("choices", [{}])[0].get("message", {}).get("content") or "",
                            wall_s=round(time.monotonic() - start, 3), exit_code=0 if status == 200 else 1,
-                           timed_out=False, truncation={"kind": "head_characters", "chars": len(truncated),
-                           "original_chars": original_chars, "truncated": original_chars > len(truncated)})
+                           timed_out=False)
                 (run_dir / "base-response.json").write_bytes(data)
             else:
                 env = {k: v for k, v in os.environ.items()
@@ -419,14 +452,14 @@ def run_one(task, arm, rep, args, protocol, ledger):
             if arm == "rlm-no-subcalls" and row.get("subcalls", 0):
                 row["valid"] = False
                 row["error"] = "no-subcalls arm dispatched a child"
-            if arm not in ("base-truncated", "nano-rlm"):
+            if arm not in BASE_ARMS and arm != "nano-rlm":
                 # Prove actual root tool exposure rather than trusting only YAML.
                 exposed = [t for x in router.observed if x["role"] == "root" for t in x["tools"]]
                 row["rlm_eager_observed"] = "rlm_load" in exposed and "rlm_exec" in exposed
                 if not row["rlm_eager_observed"] or not row.get("cells"):
                     row["valid"] = False
                     row["error"] = "RLM tools not exposed or no REPL cell executed"
-            if arm not in ("base-truncated", "nano-rlm"):
+            if arm not in BASE_ARMS and arm != "nano-rlm":
                 row["root_answer"] = row.get("answer", "")
                 final = row.get("validated_final")
                 if final is None:
@@ -440,7 +473,7 @@ def run_one(task, arm, rep, args, protocol, ledger):
                                for s in ("max_iterations", "budget", "interrupt"))):
                     row["valid"] = False
                     row.setdefault("error", "conversation_incomplete")
-            if arm != "base-truncated" and not child_outcomes_ok(arm, row):
+            if arm not in BASE_ARMS and not child_outcomes_ok(arm, row):
                 row["valid"] = False
                 row.setdefault("error", "unrecovered_or_unknown_child_outcome")
             if row["valid"]:
@@ -488,6 +521,9 @@ def parser():
     p.add_argument("--max-subcalls", type=int, default=16)
     p.add_argument("--max-context-chars", type=int, default=100_000_000)
     p.add_argument("--base-context-chars", type=int, default=48_000)
+    p.add_argument("--base-tokenizer-json", type=Path, help="offline model tokenizer for base-full")
+    p.add_argument("--base-window-tokens", type=int, help="declared route context capacity for base-full")
+    p.add_argument("--base-chat-overhead-tokens", type=int, help="reserve for base-full provider chat framing")
     p.add_argument("--nano-total-tokens", type=int, default=200_000)
     p.add_argument("--provider-cap", type=int, default=2999)
     p.add_argument("--disable-thinking", action="store_true",
@@ -504,12 +540,20 @@ def main(argv=None):
             setattr(args, name, Path(os.path.abspath(value)))
     args.nano_python = args.nano_python or args.nano_source / ".venv/bin/python"
     arms = tuple(args.arms.split(","))
-    if not arms or set(arms) - set(ARMS) or len(set(arms)) != len(arms):
+    if not arms or set(arms) - SUPPORTED_ARMS or len(set(arms)) != len(arms):
         raise ValueError("unknown or duplicate arms")
     if min(args.repeats, args.timeout, args.max_subcalls, args.max_turns, args.base_context_chars) < 1:
         raise ValueError("budgets and repeats must be positive")
     if args.limit_tasks is not None and args.limit_tasks < 1:
         raise ValueError("--limit-tasks must be positive")
+    base_tokenizer = None
+    if "base-full" in arms:
+        if (args.base_tokenizer_json is None or args.base_window_tokens is None
+                or args.base_window_tokens < 1 or args.base_chat_overhead_tokens is None
+                or args.base_chat_overhead_tokens < 0 or args.max_tokens < 1):
+            raise ValueError("base-full requires --base-tokenizer-json, positive --base-window-tokens "
+                             "and --max-tokens, and nonnegative --base-chat-overhead-tokens")
+        base_tokenizer = LocalTokenizer(args.base_tokenizer_json)
     if not args.scorer.is_file():
         raise ValueError("scorer must be a regular file")
     scorer_sha256 = digest(args.scorer)
@@ -545,18 +589,36 @@ def main(argv=None):
                         harness_sha256=digest(Path(__file__)), proxy_sha256=digest(HERE / "paper_proxy.py"),
                         hermes_client_sha256=digest(HERE / "hermes_client.py"),
                         scorer_sha256=scorer_sha256)
+        if base_tokenizer is not None:
+            protocol.update(base_tokenizer_sha256=base_tokenizer.sha256,
+                            base_tokenizer_engine=base_tokenizer.engine,
+                            base_tokenizer_loader_sha256=digest(HERE / "scaling_tokenizer.py"))
+        else:
+            for option in ("base_tokenizer_json", "base_window_tokens", "base_chat_overhead_tokens"):
+                protocol.pop(option)
         if soul_sha256 is not None:
             protocol["home_soul_sha256"] = soul_sha256
         done = completed(args.out)
         ledger = Ledger(args.ops_dir / "request-ledger.sqlite3", args.provider_cap)
+        dry_run_capacity = {}
         for task, arm, rep in schedule(tasks, arms, args.repeats):
             key = row_key(task, arm, rep, protocol)
             if key in done:
                 continue
             if args.dry_run:
-                print(json.dumps({"row_key": key, "task_id": task["id"], "arm": arm, "rep": rep}))
+                preview = {"row_key": key, "task_id": task["id"], "arm": arm, "rep": rep}
+                if arm == "base-full":
+                    task_id = task["id"]
+                    if task_id not in dry_run_capacity:
+                        _, _, dry_run_capacity[task_id] = full_context_prompt(
+                            Path(task["context_path"]), task_prompt(task, arm), args, base_tokenizer)
+                    preview["full_context"] = dry_run_capacity[task_id]
+                print(json.dumps(preview))
                 continue
-            row = run_one(task, arm, rep, args, protocol, ledger)
+            if arm == "base-full":
+                row = run_one(task, arm, rep, args, protocol, ledger, base_tokenizer=base_tokenizer)
+            else:
+                row = run_one(task, arm, rep, args, protocol, ledger)
             with args.out.open("a+b") as f:
                 separator = b""
                 if f.tell():
