@@ -32,9 +32,12 @@ class ValidateTests(unittest.TestCase):
                   {'max_subcalls': 1.5}, {'max_tokens': True}, {'max_cost': True},
                   {'timeout_s': float('inf')}, {'max_cost': float('nan')}, {'max_tokens': 'x'},
                   {'bogus': 1}, {'subcall_task': ''}, {'subcall_task': ' a'}, {'subcall_task': 3},
-                  {'max_prompt_chars': 0}):
+                  {'max_prompt_chars': 0}, {'timeout_s': None}, {'max_tokens': None}):
             with self.subTest(s=s), self.assertRaises(ValueError):
                 settings.validate(s)
+
+    def test_merges_over_defaults(self):
+        self.assertEqual(settings.validate({'max_cost': 0.25}), {**settings.DEFAULTS, 'max_cost': 0.25})
 
     def test_float_timeout_and_cost_allowed(self):
         r = settings.validate({'timeout_s': 0.5, 'max_cost': 0.25})
@@ -45,7 +48,10 @@ class LimitsTests(unittest.TestCase):
     def test_defaults_without_env_or_ctx(self):
         with env(), warnings.catch_warnings():
             warnings.simplefilter('error')
-            self.assertEqual(settings.limits(), settings.DEFAULTS)
+            self.assertEqual(settings.limits(), {
+                'max_subcalls': 200, 'max_depth': 1, 'max_tokens': 4000, 'timeout_s': 600.0,
+                'max_cost': None, 'subcall_task': 'rlm_subcall', 'max_prompt_chars': 400_000,
+                'max_output_chars': 6000, 'concurrency': 8, 'max_corpus_chars': 400_000_000})
 
     def test_config_beats_env_without_warning(self):
         with env(RLM_MAX_TOKENS='9'), warnings.catch_warnings():
