@@ -32,7 +32,8 @@ class ValidateTests(unittest.TestCase):
                   {'max_subcalls': 1.5}, {'max_tokens': True}, {'max_cost': True},
                   {'timeout_s': float('inf')}, {'max_cost': float('nan')}, {'max_tokens': 'x'},
                   {'bogus': 1}, {'subcall_task': ''}, {'subcall_task': ' a'}, {'subcall_task': 3},
-                  {'max_prompt_chars': 0}, {'timeout_s': None}, {'max_tokens': None}):
+                  {'max_prompt_chars': 0}, {'max_output_chars': 0}, {'max_corpus_chars': 0},
+                  {'timeout_s': None}, {'max_tokens': None}):
             with self.subTest(s=s), self.assertRaises(ValueError):
                 settings.validate(s)
 
@@ -64,8 +65,15 @@ class LimitsTests(unittest.TestCase):
                 ('RLM_TIMEOUT_S', 'timeout_s', '1.5', 1.5), ('RLM_CELL_TIMEOUT_S', 'timeout_s', '2', 2.0),
                 ('RLM_MAX_COST', 'max_cost', '0.5', 0.5), ('RLM_SUBCALL_TASK', 'subcall_task', 'x', 'x'),
                 ('RLM_MAX_SUBCALLS', 'max_subcalls', '3', 3)):
-            with self.subTest(name=name), env(**{name: raw}), self.assertWarns(DeprecationWarning):
+            with self.subTest(name=name), env(**{name: raw}), self.assertWarnsRegex(
+                    DeprecationWarning, f'^{name} is deprecated; use plugins.entries.rlm.settings.{key}$') as cm:
                 self.assertEqual(settings.limits()[key], want)
+            self.assertTrue(cm.filename.endswith('test_settings_validate.py'))
+
+    def test_env_applies_when_ctx_lacks_key(self):
+        with env(RLM_TIMEOUT_S='2'), self.assertWarns(DeprecationWarning):
+            r = settings.limits(Ctx(max_tokens=5))
+        self.assertEqual((r['timeout_s'], r['max_tokens']), (2.0, 5))
 
     def test_first_env_alias_wins(self):
         with env(RLM_MAX_TOKENS='7', RLM_SUBCALL_MAX_TOKENS='8'), warnings.catch_warnings():
