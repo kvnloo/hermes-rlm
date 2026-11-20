@@ -126,6 +126,7 @@ def score_task(task: dict, answer: str) -> float:
         if answer_type.endswith("DATE"):
             # The upstream helper uses dateutil. Pin default to prevent today's
             # date from affecting incomplete dates, and reject incomplete dates.
+            # A missing dateutil must raise, not silently score every date 0.
             try:
                 from dateutil.parser import parse
             except ImportError as exc:

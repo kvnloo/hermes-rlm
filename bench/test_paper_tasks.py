@@ -8,9 +8,12 @@ from datetime import date
 import hashlib
 import importlib.util
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
+import paper_tasks
 from paper_tasks import (A, D, E, H, L, N, TaskBuilder, labeled_users,
                          oolong_gold, oolong_parse, pair_predicates, pairs_gold,
                          parse_pairs, read_jsonl, score_task)
@@ -132,9 +135,18 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(self.score(scorer, "entity", "Label: [entity]"), 1)
         self.assertEqual(self.score(scorer, "entity", "Label: Entity"), 0)
         self.assertEqual(self.score(scorer, "a is more common than b", "Answer: more common"), 1)
+
+    @unittest.skipUnless(importlib.util.find_spec("dateutil"), "requires python-dateutil")
+    def test_oolong_dates(self):
         scorer = dict(type="oolong", answer_type="ANSWER_TYPE.DATE")
         self.assertEqual(self.score(scorer, "2023-01-06T00:00:00", "Date: January 6, 2023"), 1)
         self.assertEqual(self.score(scorer, "2023-01-06T00:00:00", "Date: January 2023"), 0)
+
+    def test_oolong_date_requires_dateutil_instead_of_scoring_zero(self):
+        scorer = dict(type="oolong", answer_type="ANSWER_TYPE.DATE")
+        with mock.patch.dict(sys.modules, {"dateutil": None, "dateutil.parser": None}):
+            with self.assertRaises(paper_tasks.DateParserUnavailable):
+                self.score(scorer, "2023-01-06T00:00:00", "Date: January 6, 2023")
 
     def test_ruler_choices_browse(self):
         self.assertEqual(self.score("ruler", ["ABC", "123"], "abc only"), .5)

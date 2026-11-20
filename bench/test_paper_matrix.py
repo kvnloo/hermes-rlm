@@ -2,12 +2,14 @@
 
 reuse-checked: existing run_bench scoring and paper_tasks worker tests; no API calls.
 """
+import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -151,6 +153,7 @@ class MatrixTests(unittest.TestCase):
             self.assertNotIn("context_path", prompt)
         self.assertIn("max_depth=0", matrix.task_prompt(self.task, "rlm-no-subcalls"))
 
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "requires pyyaml (fresh_home writes config.yaml)")
     def test_fresh_homes_have_only_safe_seed(self):
         template = self.root / "template"
         template.mkdir()
@@ -297,6 +300,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(summary["root_prompt_tokens"], 8)
         self.assertEqual(summary["root_completion_tokens"], 3)
 
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "requires pyyaml (fresh_home writes config.yaml)")
     def test_hermes_row_end_to_end_adapter(self):
         context = self.root / "source.txt"
         context.write_text("73521 input only")
@@ -395,8 +399,18 @@ class MatrixTests(unittest.TestCase):
         self.assertTrue(result["timed_out"])
         self.assertLess(result["wall_s"], 3)
         child = int(pidfile.read_text())
-        stat = Path(f"/proc/{child}/stat")
-        self.assertTrue(not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] == "Z")
+        # SIGKILL is asynchronous; poll briefly instead of racing the kernel.
+        deadline = time.monotonic() + 2
+        while not self.child_gone(child) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(self.child_gone(child))
+
+    @staticmethod
+    def child_gone(pid):
+        try:
+            return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z"
+        except OSError:
+            return True
 
 
 if __name__ == "__main__":
