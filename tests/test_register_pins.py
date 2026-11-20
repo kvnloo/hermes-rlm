@@ -45,6 +45,7 @@ class RegisterPins(unittest.TestCase):
             self.assertIs(h, handler)
             self.assertEqual(kw['description'], schema['description'])
             self.assertEqual(kw['emoji'], '🧮')
+            self.assertEqual(set(kw), {'description', 'emoji'})
 
     def test_manifest_provides_tools_match(self):
         text = (Path(rlm.__file__).parent / 'plugin.yaml').read_text()
@@ -68,7 +69,9 @@ class RegisterPins(unittest.TestCase):
         handler, kw = self.ctx.cmds['rlm']
         self.assertEqual(list(self.ctx.cmds), ['rlm'])
         self.assertIs(handler, rlm._rlm_command)
-        self.assertTrue(kw['description'])
+        self.assertEqual(set(kw), {'description'})
+        self.assertIsInstance(kw['description'], str)
+        self.assertTrue(kw['description'].strip())
 
 
 if __name__ == '__main__':
