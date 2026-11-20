@@ -33,7 +33,7 @@ async def main(prompt: str) -> None:
     runtime = {
         "session_id": f"bench-{int(time.time())}", "model": os.environ["NANO_MODEL"],
         "provider": {"base_url": os.environ["NANO_BASE_URL"], "api_key": os.environ["NANO_API_KEY"],
-                     "headers": {}},
+                     "headers": {}, "max_retries": 0},
         "policy": json.loads(os.environ.get("NANO_POLICY", "{}")), "system_prompt_path": None,
         "append_to_system_prompt": None, "skills": ["edit"], "kernel_env": {}, "search_api_key": None,
     }

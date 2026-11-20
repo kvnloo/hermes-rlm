@@ -1,0 +1,5 @@
+# Third-party packages imported by bench/ (the plugin itself needs none).
+PyYAML
+python-dateutil
+duckdb
+agent-client-protocol
