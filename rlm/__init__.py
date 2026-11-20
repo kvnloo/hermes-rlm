@@ -108,7 +108,7 @@ def load_corpus(paths, max_chars: int, task_id: str = "default"):
         for hit in sorted(_glob.glob(raw, recursive=True)) or [raw]:
             p = Path(hit)
             if p.is_dir():
-                files += sorted(f for f in p.rglob("*") if f.is_file() and ".git" not in f.parts)
+                files += sorted(f for f in p.rglob("*") if f.is_file() and ".git" not in f.relative_to(p).parts)
             elif p.is_file():
                 files.append(p)
             else:
