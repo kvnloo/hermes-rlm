@@ -13,9 +13,14 @@ from rlm import Session  # noqa: E402
 class LlmBatchBareString(unittest.TestCase):
     def run_cell(self, code):
         calls = []
+
+        async def subcall(prompt, max_tokens):  # main's Session awaits its subcall
+            calls.append(prompt)
+            return "ok", {}
+
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"RLM_ALLOW_UNSANDBOXED": "1"}), \
                 mock.patch("shutil.which", return_value=None):
-            s = Session("t", subcall=lambda p, m: calls.append(p) or ("ok", {}), log_dir=Path(d))
+            s = Session("t", subcall=subcall, log_dir=Path(d), allow_unsandboxed=True)
             try:
                 r = s.exec(code)
             finally:
