@@ -196,7 +196,7 @@ class Session:
             t0 = time.monotonic()
             try:
                 text, usage = self.subcall(prompt, max_tokens)
-            except Exception as exc:  # one failed slice must not sink the batch
+            except BaseException as exc:  # one failed slice must not sink the batch (incl. CancelledError)
                 text, usage = f"[llm_query error: {type(exc).__name__}: {exc}]", {}
             self.log("subcall", prompt_chars=len(prompt), output_chars=len(text),
                      ms=int((time.monotonic() - t0) * 1000), **usage)
