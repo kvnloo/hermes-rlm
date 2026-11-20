@@ -36,6 +36,13 @@ class LoadCorpusDedupe(unittest.TestCase):
             self.assertEqual(list(corpus), ["z.txt", "a.txt"])  # first-seen, not sorted
             self.assertEqual(skipped, 1)
 
+    def test_same_file_spelled_differently_counts_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "y.txt").write_text("hello")
+            (Path(d) / "sub").mkdir()
+            corpus, _ = rlm.load_corpus([f"{d}/y.txt", f"{d}/sub/../y.txt"], 5)
+            self.assertEqual(corpus, {"y.txt": "hello"})
+
 
 if __name__ == "__main__":
     unittest.main()
