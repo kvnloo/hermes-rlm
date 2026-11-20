@@ -53,6 +53,12 @@ class RunHermes(unittest.TestCase):
             row, _ = self._run("hermes-tools", _cp("out\n", "session_id: from-err\n"), Path(d))
         self.assertEqual((row["session_id"], row["wall_s"], row["answer"]), ("from-err", 1.23, "out"))
 
+    def test_bare_trailing_marker_does_not_replace_the_last_real_session_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            row, _ = self._run("hermes-tools", _cp("a\nsession_id: s1\nsession_id:\n"), Path(d))
+        self.assertEqual(row["session_id"], "s1")  # \S+ requires a value; \S* would pick "" last
+        self.usage.assert_called_once_with("s1")
+
     def test_no_marker_gives_empty_session_id_and_answer_tail_is_capped(self):
         with tempfile.TemporaryDirectory() as d:
             row, _ = self._run("hermes-tools", _cp("h" * 500 + "t" * 2000), Path(d))
