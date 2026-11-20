@@ -106,6 +106,10 @@ def completed(out):
     return done
 
 
+class InvalidScorerResult(ValueError):
+    """A scorer result cannot be emitted in the benchmark row."""
+
+
 def score_answer(task, answer, module_path):
     # Dataset worker owns this implementation. Do not silently substitute an LLM judge.
     spec = importlib.util.spec_from_file_location("paper_tasks_scoring", module_path)
@@ -126,7 +130,12 @@ def score_answer(task, answer, module_path):
         raise ValueError("score_task score must be a finite number") from exc
     if not math.isfinite(score):
         raise ValueError("score_task score must be a finite number")
-    return {"score": score} if scalar else result
+    grade = {"score": score} if scalar else result
+    try:
+        json.dumps(grade, ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidScorerResult("score_task result must serialize as UTF-8 JSON") from exc
+    return grade
 
 
 def task_prompt(task, arm):
