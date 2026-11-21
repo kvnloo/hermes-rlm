@@ -81,6 +81,49 @@ def validated_final(transcript):
     return selected, count
 
 
+def observed_failure_signals(transcript):
+    """Extract narrow observations; never expose the underlying private text."""
+    calls = {}
+    signals = {"uncited_answer": False, "repl_bypass_other_tool": False}
+    for message in transcript["messages"]:
+        if message.get("role") == "assistant":
+            for call in message.get("tool_calls") or []:
+                calls[call["id"]] = call.get("function", {})
+            continue
+        if message.get("role") != "tool":
+            continue
+        call = calls.get(message.get("tool_call_id"), {})
+        name = call.get("name")
+        if name not in ("rlm_exec", "read_file"):
+            continue
+        if any(message.get(key) not in (None, name) for key in ("name", "tool_name")):
+            continue
+        try:
+            receipt = json.loads(message["content"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not isinstance(receipt, dict):
+            continue
+        if name == "rlm_exec":
+            candidate = receipt.get("final")
+            if (receipt.get("error") == "citation required for an answer over loaded context"
+                    or (receipt.get("error", False) is None and isinstance(candidate, str)
+                        and candidate.strip() and receipt.get("citations") in (None, []))):
+                signals["uncited_answer"] = True
+            continue
+        try:
+            arguments = json.loads(call.get("arguments", ""))
+        except (TypeError, ValueError):
+            continue
+        # Narrow positive proof only: a linked direct read of the benchmark copy
+        # returned text. Generic tool use and other possible routes aren't inferred.
+        if (isinstance(arguments, dict) and arguments.get("path") in ("context.txt", "./context.txt")
+                and not receipt.get("error") and receipt.get("success") is not False
+                and isinstance(receipt.get("content"), str) and receipt["content"].strip()):
+            signals["repl_bypass_other_tool"] = True
+    return signals
+
+
 def audit_row(row, task, ops_dir):
     """Return a new private row; never promote an invalid collection row."""
     result = deepcopy(row)
@@ -141,6 +184,7 @@ def audit_row(row, task, ops_dir):
                     reasons.append("conversation_interrupted")
                 selected, count = validated_final(transcript)
                 result["audit_validated_final_count"] = count
+                result["audit_failure_signals"] = observed_failure_signals(transcript)
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 reasons.append("missing_or_malformed_transcript")
             try:
