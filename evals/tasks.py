@@ -100,7 +100,10 @@ TASKS = [
     _task("reviews", _reviews),
 ]
 
-RLM_SETTINGS = {"max_depth": 1, "max_subcalls": 60, "max_tokens": 2000, "timeout_s": 300, "max_cost": None,
+# max_tokens caps each sub-call completion. The 2000 used in the first run let the reasoning
+# sub-model spend the whole budget thinking and return empty text on 94 of 105 sub-calls
+# (results/2026-11-21-nemotron3-ultra-free/README.md), so later runs allow 16000.
+RLM_SETTINGS = {"max_depth": 1, "max_subcalls": 60, "max_tokens": 16000, "timeout_s": 300, "max_cost": None,
                 "subcall_task": "rlm_subcall", "concurrency": 4}
 ARMS = {
     "plain": {"toolsets": ["file", "terminal"],
