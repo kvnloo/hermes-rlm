@@ -2,6 +2,10 @@
 
 Experimental [Recursive Language Model](https://arxiv.org/abs/2512.24601) plugin for Hermes Agent. The corpus stays in a sandboxed Python REPL, outside the root model's prompt. The root uses `rlm_exec` to inspect it and delegates slices through Hermes's `ctx.llm.acomplete` lane.
 
+## Measured against plain Hermes
+
+On three long-context tasks a script can solve (86–161 KB files), RLM answered 9/9 correctly against plain Hermes's 7/9, and sent 58% fewer prompt tokens. Plain Hermes's misses came from summing a truncated `search_files` result. On a semantic counting task, neither arm was reliable (RLM 1/3, plain 0/3 in the valid cohort). The setup was Nemotron 3 Ultra, n = 3 per task, with a frozen harness in [`evals/`](evals/README.md). Results and caveats are in [`evals/results/`](evals/results/2026-11-21-nemotron3-ultra-free/README.md).
+
 ## Enable and configure
 
 Install `rlm/` as a Hermes plugin. Enable the plugin and opt in to its `rlm` toolset. It registers only `rlm_load` and `rlm_exec`, with no core-tool changes. Linux, `bwrap`, and system Python are required for normal use. The worker has no network, host filesystem access, or credentials.
