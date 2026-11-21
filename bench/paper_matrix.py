@@ -545,6 +545,19 @@ def main(argv=None):
                         harness_sha256=digest(Path(__file__)), proxy_sha256=digest(HERE / "paper_proxy.py"),
                         hermes_client_sha256=digest(HERE / "hermes_client.py"),
                         scorer_sha256=scorer_sha256)
+        if args.scorer.resolve() == (HERE / "paper_tasks.py").resolve():
+            scoring_types = [scoring.get("type") if isinstance(scoring, dict) else scoring
+                             for scoring in (t.get("scoring") for t in tasks)]
+            if "oolong_author" in scoring_types:
+                if not args.dry_run:
+                    try:
+                        import dateutil.parser  # noqa: F401 - evaluator dependency preflight
+                    except ImportError as exc:
+                        raise ValueError("author OOLONG scoring requires python-dateutil") from exc
+                protocol["oolong_author_scorer_sha256"] = digest(HERE / "paper_oolong_author.py")
+            if "browse_official_unavailable" in scoring_types and not args.dry_run:
+                raise ValueError("official BrowseComp-Plus grading requires --scorer; "
+                                 "materialize --browse-exact-diagnostic only for local diagnostics")
         if soul_sha256 is not None:
             protocol["home_soul_sha256"] = soul_sha256
         done = completed(args.out)

@@ -101,6 +101,10 @@ def parse_pairs(answer):
     return pairs
 
 
+class OfficialScoreUnavailable(ValueError):
+    """The selected task requires an external official evaluator."""
+
+
 class DateParserUnavailable(ValueError):
     """Date normalization cannot run without its optional evaluator dependency."""
 
@@ -110,6 +114,13 @@ def score_task(task: dict, answer: str) -> float:
     scoring = task["scoring"]
     kind = scoring["type"] if isinstance(scoring, dict) else scoring
     gold = task["gold"]
+    if kind == "oolong_author":
+        try:
+            from paper_oolong_author import _synth_score
+        except ImportError as exc:
+            raise DateParserUnavailable("author OOLONG scoring requires python-dateutil") from exc
+        return _synth_score({"answer": scoring["raw_answer"],
+                             "answer_type": scoring["answer_type"]}, str(answer or ""))
     if kind == "oolong":
         prediction = oolong_parse(str(answer or ""))
         if str(prediction) == str(gold):
@@ -153,6 +164,8 @@ def score_task(task: dict, answer: str) -> float:
         cleaned = text.strip().strip("*` ")
         match = re.fullmatch(r"(?:\(?([A-D])\)?[.)]?|(?:The )?(?:correct )?(?:answer|option|choice)(?: is|:)\s*\(?([A-D])\)?[.)]?)", cleaned, re.I)
         return float(bool(match) and (match[1] or match[2]).upper() == gold)
+    if kind == "browse_official_unavailable":
+        raise OfficialScoreUnavailable("BrowseComp-Plus requires an externally supplied semantic scorer")
     if kind == "browse_exact":
         normalize = lambda value: " ".join(str(value).casefold().split())
         return float(normalize(text) == normalize(gold))
