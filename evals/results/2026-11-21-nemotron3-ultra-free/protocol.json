@@ -1,0 +1,12 @@
+{
+ "base_url": "https://openrouter.ai/api/v1",
+ "harness_sha": "5b04e7866e105cb6",
+ "hermes_sha": "791df314d23ea0aa8163b0810bb4a63165d53a19",
+ "max_iterations": 24,
+ "max_tokens": 4096,
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "plugin_sha": "9cd9bd7e68ab06e7",
+ "repo_sha": "dc8094ab9173dbb7cc2d0f12e7d87a86031addd6",
+ "sub_model": "nvidia/nemotron-3.5-lightning:free",
+ "tasks_sha": "78cd90e870fc6902"
+}
