@@ -124,3 +124,64 @@ plain-context input, provided the selected model's window also fits.
 Otherwise label the baseline a truncation comparison.
 
 No model runs or provider calls are needed for generation or the unit tests.
+
+## Token-measured length sweep and full-context baseline
+
+Supply a model tokenizer exported as a local Hugging Face Tokenizers
+`tokenizer.json` file. Install the benchmark dependencies from
+`bench/requirements.txt`. The generator never fetches a tokenizer or calls a
+model. For comparable plots use the same sweep tokenizer across arms; choose
+the actual serving model tokenizer separately for `base-full`.
+
+```sh
+python -m bench.generate_scaling --tokenizer-json "$SWEEP_TOKENIZER_JSON" --out "$OPS/sweep"
+```
+
+Default sweep: exact raw-context lengths 2¹³ through 2²⁰, three synthetic
+families and two task variants per family/length. `--exponents` selects bins
+and `--variants` changes the number of tasks. The file is re-encoded to
+verify each target, without added specials, tokenizer truncation, or padding
+settings. Manifest rows report the actual token count as `size_tokens`; metadata
+records the tokenizer file SHA-256, engine version and amount of generated distractor
+padding. The content is synthetic, not a real-paper dataset. No chars/4
+estimate is used for this sweep. Tokenizers unable to hit a required exact
+length with supported padding pieces fail explicitly.
+
+The existing default arm list is unchanged. To opt in, add `base-full` to
+`--arms` and supply all three options:
+
+```sh
+# Add to the paper_matrix.py command above with $OPS/sweep/full.jsonl:
+--arms base-full,released-rlm,fork-rlm \
+--base-tokenizer-json "$ACTUAL_ROOT_TOKENIZER_JSON" \
+--base-window-tokens "$DECLARED_ROUTE_WINDOW" \
+--base-chat-overhead-tokens "$CHAT_WRAPPER_RESERVE" --max-tokens "$OUTPUT_RESERVE"
+```
+
+`base-full` sends the complete UTF-8 context, then the question and answer
+instruction, as one user message. The local admission check counts that
+complete message and adds the explicit wrapper reserve and max output tokens.
+It admits at the inclusive declared boundary, without slicing text.
+An over-window case records an unscored `skipped` row with zero model calls.
+Dry-run previews show the same local admission rule. The operator must use
+the actual route tokenizer, current window, and a sufficient chat reserve;
+the local test cannot certify server-side acceptance or hidden provider work.
+
+```sh
+# Published aggregate summary: primary cohort, nominal lengths, point estimates only.
+python bench/plot_scaling.py "$STUDY_SUMMARY_JSON" --output "$OPS/published-scaling.png"
+# New task-level matrix data: scores and deterministic task-cluster intervals.
+python bench/plot_scaling.py "$OPS/scaling-rows.jsonl" --format jsonl --output "$OPS/sweep-scaling.png"
+```
+
+Plots separate family, model, protocol, metric and tokenizer rather than
+pooling incompatible runs. Valid repeats are averaged within each task; the
+95% percentile bootstrap draws task averages with replacement (default
+2,000 draws and seed 0). Fewer than two valid task clusters cannot produce an
+interval. Intervals for related synthetic variants describe this fixture,
+not performance on an independent paper population. Invalid, skipped and
+missing scores are not zeros. Aggregates do
+not contain the task rows needed to resample, so the published render does
+not generate confidence intervals. Use repeatable `--cohort` to render
+explicitly labeled pilot/smoke panels. A `.points.json` sidecar exposes the
+plotted values for verification.

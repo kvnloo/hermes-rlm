@@ -92,7 +92,7 @@ def audit_row(row, task, ops_dir):
     reasons = result["audit_reasons"]
     hashes = result["audit_evidence_sha256"]
     arm = row.get("arm")
-    if arm == "base-truncated":
+    if arm in {"base-truncated", "base-full"}:
         result["audit_adherence"] = "not_applicable_base"
         return result
     if arm not in HERMES_ARMS | {"nano-rlm"}:
