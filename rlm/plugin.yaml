@@ -4,6 +4,15 @@ description: "Recursive Language Model mode: corpus as `context` in a sandboxed 
 author: "Kevin Rajan <7121943+kvnloo@users.noreply.github.com>"
 license: MIT
 manifest_version: 2
+requires_hermes: ">=0.22.0"
 provides_tools:
   - rlm_load
   - rlm_exec
+provides_hooks:
+  - pre_llm_call
+  - transform_llm_output
+  - on_session_start
+  - on_session_reset
+  - on_session_end
+provides_middleware:
+  - tool_execution
